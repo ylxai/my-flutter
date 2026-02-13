@@ -28,22 +28,19 @@ jobs:
           channel: 'stable'
 
       - name: Get Dependencies
-        working-directory: ./apps-flutter
         run: flutter pub get
 
       - name: Verify Rust Bridge
-        working-directory: ./apps-flutter
         run: flutter pub run flutter_rust_bridge:codegen
 
       - name: Build Linux
-        working-directory: ./apps-flutter
         run: flutter build linux --release
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-bundle
-          path: apps-flutter/build/linux/x64/release/bundle/
+          path: build/linux/x64/release/bundle/
 
   build-windows:
     name: Windows Build
@@ -66,19 +63,16 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Get Dependencies
-        working-directory: ./apps-flutter
         run: flutter pub get
 
       - name: Verify Rust Bridge
-        working-directory: ./apps-flutter
         run: flutter pub run flutter_rust_bridge:codegen
 
       - name: Build Windows
-        working-directory: ./apps-flutter
         run: flutter build windows --release
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: apps-flutter/build/windows/runner/Release/
+          path: build/windows/runner/Release/
