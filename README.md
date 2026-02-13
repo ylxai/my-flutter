@@ -1,17 +1,42 @@
-# filecopy_utility
+# Hafiportrait Manager (filecopy_utility)
 
-A new Flutter project.
+Desktop Flutter app for fast photo copy, gallery preview, and publishing to
+Cloudflare R2 + Google Drive. Includes Rust image processing via
+flutter_rust_bridge.
 
-## Getting Started
+## Requirements
 
-This project is a starting point for a Flutter application.
+- Flutter (stable channel)
+- Rust toolchain (stable)
+- flutter_rust_bridge_codegen (for bindings)
 
-A few resources to get you started if this is your first Flutter project:
+## Setup
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+flutter pub get
+cargo install flutter_rust_bridge_codegen@2.9.0
+flutter_rust_bridge_codegen generate
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Run
+
+```bash
+flutter run -d linux
+```
+
+## Build
+
+```bash
+flutter build linux --release
+```
+
+## Tests
+
+```bash
+flutter analyze
+flutter test
+```
+
+## Notes
+
+- `credentials.json` for Google Drive OAuth is not stored in this repo.

@@ -22,6 +22,9 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -54,6 +57,17 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
+      - name: Check Dart format
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Rust fmt
+        working-directory: rust
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        working-directory: rust
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
       - name: Analyze
         run: flutter analyze
 
@@ -83,6 +97,9 @@ jobs:
         with:
           toolchain: stable
           target: x86_64-pc-windows-msvc
+
+      - name: Install Rust components
+        run: rustup component add rustfmt clippy
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -118,6 +135,17 @@ jobs:
 
       - name: Get Dependencies
         run: flutter pub get
+
+      - name: Check Dart format
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Rust fmt
+        working-directory: rust
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        working-directory: rust
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Analyze
         run: flutter analyze
