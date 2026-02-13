@@ -121,8 +121,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       await _storeR2AccountsMetadata(prefs, hydrated);
     } catch (e) {
       debugPrint('Failed to parse R2 accounts: $e');
-      await prefs.remove('r2Accounts');
-      state = state.copyWith(r2Accounts: []);
+      return;
     }
 
     // Load GDrive credentials path

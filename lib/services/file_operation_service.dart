@@ -89,11 +89,27 @@ class FileOperationService {
         );
       }
 
+      final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
+      final requestedNames = <String>{};
+      for (final name in fileNames) {
+        final trimmed = name.trim();
+        if (trimmed.isNotEmpty) {
+          requestedNames.add(trimmed.toLowerCase());
+        }
+      }
+
       // Scan all files in source folder
       final allFiles = <String, List<File>>{};
-      for (final entity in dir.listSync(recursive: true)) {
+      for (final entity in dir.listSync(recursive: true, followLinks: false)) {
         if (entity is File) {
           final name = _fileNameWithoutExt(entity.path).toLowerCase();
+          if (!requestedNames.contains(name)) {
+            continue;
+          }
+          final ext = _fileExtension(entity.path).toLowerCase();
+          if (!normalizedExt.contains(ext)) {
+            continue;
+          }
           allFiles.putIfAbsent(name, () => []).add(entity);
         }
       }
@@ -119,20 +135,17 @@ class FileOperationService {
         final matches = allFiles[key] ?? const [];
         bool found = false;
         for (final file in matches) {
-          final ext2 = _fileExtension(file.path).toLowerCase();
-          if (extensions.any((e) => e.toLowerCase() == ext2)) {
-            final stat = file.statSync();
-            validFiles.add(
-              FileItem(
-                path: file.path,
-                name: _fileName(file.path),
-                size: stat.size,
-                createdDate: stat.changed,
-                modifiedDate: stat.modified,
-              ),
-            );
-            found = true;
-          }
+          final stat = file.statSync();
+          validFiles.add(
+            FileItem(
+              path: file.path,
+              name: _fileName(file.path),
+              size: stat.size,
+              createdDate: stat.changed,
+              modifiedDate: stat.modified,
+            ),
+          );
+          found = true;
         }
 
         if (!found) {
@@ -182,7 +195,14 @@ class FileOperationService {
 
     final parallelism = settings.maxParallelism.clamp(1, files.length);
     if (parallelism > 1) {
-      final controller = StreamController<CopyProgress>();
+      final controller = StreamController<CopyProgress>(
+        onCancel: () {
+          _isCancelled = true;
+          if (_pauseCompleter != null && !_pauseCompleter!.isCompleted) {
+            _pauseCompleter!.complete();
+          }
+        },
+      );
       final queue = ListQueue<FileItem>.from(files);
 
       Future<void> worker() async {
@@ -426,10 +446,12 @@ class FileOperationService {
 
       final results = <FileItem>[];
 
-      for (final entity in dir.listSync(recursive: true)) {
+      final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
+
+      for (final entity in dir.listSync(recursive: true, followLinks: false)) {
         if (entity is File) {
           final ext = _fileExtension(entity.path).toLowerCase();
-          if (extensions.any((e) => e.toLowerCase() == ext)) {
+          if (normalizedExt.contains(ext)) {
             final stat = entity.statSync();
             results.add(
               FileItem(

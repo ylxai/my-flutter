@@ -119,7 +119,7 @@ pub fn copy_files_parallel(
                 };
 
                 if verify_hash && file_result.success && !file_result.skipped {
-                    match hash::verify_files_match(src, dst, &HashAlgorithm::Md5) {
+                    match hash::verify_files_match(src, dst, &HashAlgorithm::Sha256) {
                         Ok(true) => {}
                         Ok(false) => {
                             file_result.success = false;

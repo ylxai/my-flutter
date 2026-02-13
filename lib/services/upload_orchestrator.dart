@@ -38,6 +38,7 @@ class UploadProgress {
   final String currentFileName;
   final String message;
   final double overallProgress;
+  final String galleryUrl;
   final int successCount;
   final int failedCount;
   final Duration totalDuration;
@@ -49,6 +50,7 @@ class UploadProgress {
     this.currentFileName = '',
     this.message = '',
     this.overallProgress = 0.0,
+    this.galleryUrl = '',
     this.successCount = 0,
     this.failedCount = 0,
     this.totalDuration = Duration.zero,
@@ -284,7 +286,7 @@ class UploadOrchestrator {
       );
 
       // Upload manifest — URL not used yet but will be for result
-      await _r2Service.uploadManifest(
+      final manifestUrl = await _r2Service.uploadManifest(
         objectKey: '$eventSlug/manifest.json',
         manifest: manifest.toJson(),
       );
@@ -297,6 +299,7 @@ class UploadOrchestrator {
         currentFile: totalFiles,
         message: 'Upload complete!',
         overallProgress: 1.0,
+        galleryUrl: manifestUrl,
         successCount: totalFiles,
         failedCount: 0,
         totalDuration: stopwatch.elapsed,

@@ -1,29 +1,32 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
 import '../models/copy_profile.dart';
 
 /// Service for managing copy profiles (load/save/delete)
 class ProfileService {
-  final String _profilesFolder;
+  final Future<String> _profilesFolderFuture;
 
-  ProfileService() : _profilesFolder = _getProfilesFolder();
+  ProfileService() : _profilesFolderFuture = _getProfilesFolder();
 
-  static String _getProfilesFolder() {
-    final home =
-        Platform.environment['HOME'] ??
-        Platform.environment['USERPROFILE'] ??
-        '.';
-    final folder = '$home/.filecopy_utility/profiles';
-    Directory(folder).createSync(recursive: true);
+  static Future<String> _getProfilesFolder() async {
+    final appDir = await getApplicationSupportDirectory();
+    final folder = p.join(appDir.path, 'profiles');
+    await Directory(folder).create(recursive: true);
     return folder;
   }
 
-  String get _profilesFile => '$_profilesFolder/profiles.json';
+  Future<String> _profilesFile() async {
+    final folder = await _profilesFolderFuture;
+    return p.join(folder, 'profiles.json');
+  }
 
   /// Get all saved profiles
   Future<List<CopyProfile>> getAllProfiles() async {
-    final file = File(_profilesFile);
+    final file = File(await _profilesFile());
     if (!file.existsSync()) return [];
 
     try {
@@ -68,13 +71,14 @@ class ProfileService {
   }
 
   Future<void> _writeProfiles(List<CopyProfile> profiles) async {
-    final file = File(_profilesFile);
+    final path = await _profilesFile();
+    final file = File(path);
     final json = jsonEncode(profiles.map((p) => p.toJson()).toList());
-    final tempFile = File('$_profilesFile.tmp');
+    final tempFile = File('$path.tmp');
     await tempFile.writeAsString(json);
     if (await file.exists()) {
       await file.delete();
     }
-    await tempFile.rename(_profilesFile);
+    await tempFile.rename(path);
   }
 }

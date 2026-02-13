@@ -235,7 +235,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
         successCount: progress?.successCount ?? 0,
         failedCount: progress?.failedCount ?? 0,
         duration: progress?.totalDuration ?? Duration.zero,
-        galleryUrl: '',
+        galleryUrl: progress?.galleryUrl ?? '',
         isSuccess: isSuccess,
       ),
     );
