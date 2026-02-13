@@ -27,9 +27,7 @@ class GoogleDriveUploadService {
   Future<void> authenticate(String credentialsPath) async {
     final file = File(credentialsPath);
     if (!await file.exists()) {
-      throw Exception(
-        'credentials.json not found at $credentialsPath',
-      );
+      throw Exception('credentials.json not found at $credentialsPath');
     }
 
     final jsonStr = await file.readAsString();
@@ -41,16 +39,18 @@ class GoogleDriveUploadService {
       installed['client_secret'] as String,
     );
 
-    _authClient = await clientViaUserConsent(
-      clientId,
-      _scopes,
-      (String url) async {
-        final uri = Uri.parse(url);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri);
-        }
-      },
-    );
+    _authClient = await clientViaUserConsent(clientId, _scopes, (
+      String url,
+    ) async {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        throw Exception(
+          'Cannot open browser for OAuth consent. Please open: $url',
+        );
+      }
+    });
 
     _driveApi = drive.DriveApi(_authClient!);
   }
@@ -69,7 +69,11 @@ class GoogleDriveUploadService {
       ..mimeType = 'application/vnd.google-apps.folder';
 
     final result = await _driveApi!.files.create(folder);
-    return result.id!;
+    final id = result.id;
+    if (id == null || id.isEmpty) {
+      throw Exception('Drive API returned empty folder id');
+    }
+    return id;
   }
 
   /// Find a folder by name
@@ -77,7 +81,8 @@ class GoogleDriveUploadService {
   Future<String?> findFolder(String name) async {
     _ensureAuthenticated();
 
-    final query = "name='$name' and "
+    final query =
+        "name='$name' and "
         "mimeType='application/vnd.google-apps.folder' and "
         "trashed=false";
 
@@ -108,24 +113,21 @@ class GoogleDriveUploadService {
       throw Exception('File not found: $filePath');
     }
 
-    final name = fileName ??
-        filePath.split(Platform.pathSeparator).last;
+    final name = fileName ?? filePath.split(Platform.pathSeparator).last;
 
     final driveFile = drive.File()
       ..name = name
       ..parents = [folderId];
 
-    final media = drive.Media(
-      file.openRead(),
-      await file.length(),
-    );
+    final media = drive.Media(file.openRead(), await file.length());
 
-    final result = await _driveApi!.files.create(
-      driveFile,
-      uploadMedia: media,
-    );
+    final result = await _driveApi!.files.create(driveFile, uploadMedia: media);
 
-    return result.id!;
+    final id = result.id;
+    if (id == null || id.isEmpty) {
+      throw Exception('Drive API returned empty file id');
+    }
+    return id;
   }
 
   /// Make a folder publicly readable
@@ -136,9 +138,7 @@ class GoogleDriveUploadService {
       ..type = 'anyone'
       ..role = 'reader';
 
-    await _driveApi!.permissions.create(
-      permission, folderId,
-    );
+    await _driveApi!.permissions.create(permission, folderId);
   }
 
   /// Dispose of authentication resources
@@ -152,9 +152,7 @@ class GoogleDriveUploadService {
 
   void _ensureAuthenticated() {
     if (!isAuthenticated) {
-      throw Exception(
-        'Not authenticated. Call authenticate() first.',
-      );
+      throw Exception('Not authenticated. Call authenticate() first.');
     }
   }
 }

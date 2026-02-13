@@ -18,12 +18,15 @@ class R2UploadService {
   /// Initialize with an R2 account
   void configure(R2Account account) {
     _account = account;
+    final endpoint = _normalizeEndpoint(account.resolvedEndpoint);
     _client = Minio(
-      endPoint: _extractHost(account.resolvedEndpoint),
+      endPoint: endpoint.host,
       accessKey: account.accessKey,
       secretKey: account.secretKey,
-      useSSL: true,
-      port: 443,
+      useSSL: endpoint.scheme != 'http',
+      port: endpoint.hasPort
+          ? endpoint.port
+          : (endpoint.scheme == 'http' ? 80 : 443),
     );
   }
 
@@ -122,10 +125,12 @@ class R2UploadService {
     }
   }
 
-  /// Extract hostname from URL for Minio endpoint
-  String _extractHost(String url) {
+  Uri _normalizeEndpoint(String url) {
     final uri = Uri.parse(url);
-    return uri.host;
+    if (uri.scheme.isEmpty) {
+      return Uri.parse('https://$url');
+    }
+    return uri;
   }
 
   Map<String, String>? _buildMetadata(String? contentType) {
