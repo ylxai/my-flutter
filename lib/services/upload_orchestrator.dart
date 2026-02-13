@@ -10,6 +10,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -82,6 +83,13 @@ class UploadResult {
 class UploadOrchestrator {
   final R2UploadService _r2Service;
   final GoogleDriveUploadService _driveService;
+  static const _retryOptions = _RetryOptions(
+    maxRetries: 3,
+    baseDelay: Duration(milliseconds: 500),
+    maxDelay: Duration(seconds: 10),
+    backoffFactor: 2.0,
+    jitterRatio: 0.2,
+  );
 
   bool _isCancelled = false;
 
@@ -113,6 +121,13 @@ class UploadOrchestrator {
       extensions: config.extensions,
     );
     if (_isCancelled) return;
+    yield UploadProgress(
+      phase: UploadPhase.scanning,
+      currentFile: scannedFiles.length,
+      totalFiles: scannedFiles.length,
+      message: 'Found ${scannedFiles.length} files',
+      overallProgress: 0.05,
+    );
     final imageFiles = scannedFiles
         .where((f) => _isProcessableImage(f.path))
         .toList();
@@ -133,6 +148,7 @@ class UploadOrchestrator {
         phase: UploadPhase.processing,
         totalFiles: totalFiles,
         message: 'Processing images (resize + WebP)...',
+        overallProgress: 0.1,
       );
 
       tempDir = await _createTempOutputDir();
@@ -196,19 +212,25 @@ class UploadOrchestrator {
 
         try {
           // Upload thumbnail
-          await _r2Service.uploadFile(
-            filePath: pf.thumbPath,
-            objectKey: '$eventSlug/thumbs/${pf.name}.webp',
-            contentType: 'image/webp',
+          await _withRetry(
+            action: () => _r2Service.uploadFile(
+              filePath: pf.thumbPath,
+              objectKey: '$eventSlug/thumbs/${pf.name}.webp',
+              contentType: 'image/webp',
+            ),
+            isRetryable: _isRetryableR2,
           );
 
           uploadedR2++;
 
           // Upload preview
-          await _r2Service.uploadFile(
-            filePath: pf.previewPath,
-            objectKey: '$eventSlug/previews/${pf.name}.webp',
-            contentType: 'image/webp',
+          await _withRetry(
+            action: () => _r2Service.uploadFile(
+              filePath: pf.previewPath,
+              objectKey: '$eventSlug/previews/${pf.name}.webp',
+              contentType: 'image/webp',
+            ),
+            isRetryable: _isRetryableR2,
           );
         } catch (e) {
           yield UploadProgress(
@@ -223,8 +245,18 @@ class UploadOrchestrator {
       String? driveFolderId;
       if (config.uploadOriginalToDrive && _driveService.isAuthenticated) {
         try {
-          driveFolderId = await _driveService.createFolder(config.eventName);
-          await _driveService.makeFolderPublic(driveFolderId);
+          driveFolderId = await _withRetry(
+            action: () => _driveService.createFolder(config.eventName),
+            isRetryable: _isRetryableDrive,
+          );
+          final folderId = driveFolderId;
+          if (folderId == null) {
+            throw Exception('Drive folder id missing');
+          }
+          await _withRetry(
+            action: () => _driveService.makeFolderPublic(folderId),
+            isRetryable: _isRetryableDrive,
+          );
         } catch (e) {
           yield UploadProgress(
             phase: UploadPhase.error,
@@ -234,6 +266,14 @@ class UploadOrchestrator {
         }
 
         final driveFiles = scannedFiles;
+        final folderId = driveFolderId;
+        if (folderId == null) {
+          yield const UploadProgress(
+            phase: UploadPhase.error,
+            message: 'Drive folder id missing after creation',
+          );
+          return;
+        }
         for (int i = 0; i < driveFiles.length; i++) {
           if (_isCancelled) return;
 
@@ -247,9 +287,12 @@ class UploadOrchestrator {
           );
 
           try {
-            await _driveService.uploadFile(
-              filePath: driveFiles[i].path,
-              folderId: driveFolderId,
+            await _withRetry(
+              action: () => _driveService.uploadFile(
+                filePath: driveFiles[i].path,
+                folderId: folderId,
+              ),
+              isRetryable: _isRetryableDrive,
             );
           } catch (e) {
             yield UploadProgress(
@@ -286,9 +329,12 @@ class UploadOrchestrator {
       );
 
       // Upload manifest — URL not used yet but will be for result
-      final manifestUrl = await _r2Service.uploadManifest(
-        objectKey: '$eventSlug/manifest.json',
-        manifest: manifest.toJson(),
+      final manifestUrl = await _withRetry(
+        action: () => _r2Service.uploadManifest(
+          objectKey: '$eventSlug/manifest.json',
+          manifest: manifest.toJson(),
+        ),
+        isRetryable: _isRetryableR2,
       );
 
       stopwatch.stop();
@@ -367,6 +413,96 @@ class UploadOrchestrator {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-|-$'), '');
   }
+
+  Future<T> _withRetry<T>({
+    required Future<T> Function() action,
+    required bool Function(Object error) isRetryable,
+  }) async {
+    for (var attempt = 0; attempt <= _retryOptions.maxRetries; attempt++) {
+      try {
+        return await action();
+      } catch (e) {
+        if (_isCancelled) rethrow;
+        final canRetry = attempt < _retryOptions.maxRetries && isRetryable(e);
+        if (!canRetry) rethrow;
+
+        final delay = _retryDelay(attempt + 1);
+        await Future.delayed(delay);
+      }
+    }
+    throw StateError('Retry failed');
+  }
+
+  Duration _retryDelay(int attempt) {
+    final baseMs = _retryOptions.baseDelay.inMilliseconds.toDouble();
+    final raw = baseMs * pow(_retryOptions.backoffFactor, attempt - 1);
+    final capped = raw.clamp(
+      baseMs,
+      _retryOptions.maxDelay.inMilliseconds.toDouble(),
+    );
+    final jitter = capped * _retryOptions.jitterRatio;
+    final delta = (Random().nextDouble() * jitter * 2) - jitter;
+    final ms = (capped + delta).round();
+    return Duration(milliseconds: ms);
+  }
+
+  bool _isRetryableR2(Object error) {
+    final msg = error.toString().toLowerCase();
+    if (msg.contains('401') || msg.contains('403') || msg.contains('400')) {
+      return false;
+    }
+    return _isTransientError(error);
+  }
+
+  bool _isRetryableDrive(Object error) {
+    final msg = error.toString().toLowerCase();
+    if (msg.contains('invalid_grant') ||
+        msg.contains('unauthorized') ||
+        msg.contains('permission') ||
+        msg.contains('401') ||
+        msg.contains('403') ||
+        msg.contains('404') ||
+        msg.contains('400')) {
+      return false;
+    }
+    return _isTransientError(error);
+  }
+
+  bool _isTransientError(Object error) {
+    if (error is TimeoutException) return true;
+    if (error is SocketException) return true;
+    if (error is HttpException) return true;
+    final msg = error.toString().toLowerCase();
+    return msg.contains('timeout') ||
+        msg.contains('timed out') ||
+        msg.contains('connection reset') ||
+        msg.contains('connection closed') ||
+        msg.contains('connection refused') ||
+        msg.contains('network') ||
+        msg.contains('socket') ||
+        msg.contains('rate') ||
+        msg.contains('throttle') ||
+        msg.contains('500') ||
+        msg.contains('502') ||
+        msg.contains('503') ||
+        msg.contains('504');
+  }
+}
+
+class _RetryOptions {
+  final int maxRetries;
+  final Duration baseDelay;
+  final Duration maxDelay;
+  final double backoffFactor;
+  final double jitterRatio;
+
+  const _RetryOptions({
+    required this.maxRetries,
+    required this.baseDelay,
+    required this.maxDelay,
+    required this.backoffFactor,
+    required this.jitterRatio,
+  });
 }
 
 /// Internal processed file data

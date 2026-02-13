@@ -340,6 +340,15 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           '${(progress.overallProgress * 100).toInt()}%',
           style: theme.textTheme.bodySmall,
         ),
+        if (progress.totalFiles > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Step ${progress.currentFile}/${progress.totalFiles}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withAlpha(170),
+            ),
+          ),
+        ],
         if (progress.currentFileName.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(
