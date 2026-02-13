@@ -7,10 +7,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use image::codecs::webp::WebPEncoder;
 use image::imageops::FilterType;
 use image::DynamicImage;
 use image::ImageReader;
+use webp::Encoder;
 
 /// Result of processing a single image
 #[derive(Debug, Clone)]
@@ -68,53 +68,37 @@ pub fn process_image(
             Ok(r) => match r.decode() {
                 Ok(img) => img,
                 Err(e) => {
-                    return make_error(
-                        &source_str, start,
-                        &format!("Decode failed: {}", e),
-                    );
+                    return make_error(&source_str, start, &format!("Decode failed: {}", e));
                 }
             },
             Err(e) => {
-                return make_error(
-                    &source_str, start,
-                    &format!("Format guess failed: {}", e),
-                );
+                return make_error(&source_str, start, &format!("Format guess failed: {}", e));
             }
         },
         Err(e) => {
-            return make_error(
-                &source_str, start,
-                &format!("Open failed: {}", e),
-            );
+            return make_error(&source_str, start, &format!("Open failed: {}", e));
         }
     };
 
     // Generate thumbnail
-    if let Err(e) = resize_and_save_webp(
-        &img, config.thumb_width, &thumb_path,
-    ) {
-        return make_error(
-            &source_str, start,
-            &format!("Thumbnail failed: {}", e),
-        );
+    if let Err(e) =
+        resize_and_save_webp(&img, config.thumb_width, config.thumb_quality, &thumb_path)
+    {
+        return make_error(&source_str, start, &format!("Thumbnail failed: {}", e));
     }
 
     // Generate preview
     if let Err(e) = resize_and_save_webp(
-        &img, config.preview_width, &preview_path,
+        &img,
+        config.preview_width,
+        config.preview_quality,
+        &preview_path,
     ) {
-        return make_error(
-            &source_str, start,
-            &format!("Preview failed: {}", e),
-        );
+        return make_error(&source_str, start, &format!("Preview failed: {}", e));
     }
 
-    let thumb_size = fs::metadata(&thumb_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
-    let preview_size = fs::metadata(&preview_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let thumb_size = fs::metadata(&thumb_path).map(|m| m.len()).unwrap_or(0);
+    let preview_size = fs::metadata(&preview_path).map(|m| m.len()).unwrap_or(0);
 
     ImageProcessResult {
         source_path: source_str,
@@ -159,65 +143,45 @@ pub fn process_batch(
                     Ok(r2) => match r2.decode() {
                         Ok(img) => img,
                         Err(e) => {
-                            return make_error(
-                                &source_str, start,
-                                &format!("Decode: {}", e),
-                            );
+                            return make_error(&source_str, start, &format!("Decode: {}", e));
                         }
                     },
                     Err(e) => {
-                        return make_error(
-                            &source_str, start,
-                            &format!("Format: {}", e),
-                        );
+                        return make_error(&source_str, start, &format!("Format: {}", e));
                     }
                 },
                 Err(e) => {
-                    return make_error(
-                        &source_str, start,
-                        &format!("Open: {}", e),
-                    );
+                    return make_error(&source_str, start, &format!("Open: {}", e));
                 }
             };
 
-            let thumb_path = thumbs_dir
-                .join(format!("{}.webp", stem));
-            let preview_path = previews_dir
-                .join(format!("{}.webp", stem));
+            let thumb_path = thumbs_dir.join(format!("{}.webp", stem));
+            let preview_path = previews_dir.join(format!("{}.webp", stem));
 
             // Thumbnail
-            if let Err(e) = resize_and_save_webp(
-                &img, config.thumb_width, &thumb_path,
-            ) {
-                return make_error(
-                    &source_str, start,
-                    &format!("Thumb: {}", e),
-                );
+            if let Err(e) =
+                resize_and_save_webp(&img, config.thumb_width, config.thumb_quality, &thumb_path)
+            {
+                return make_error(&source_str, start, &format!("Thumb: {}", e));
             }
 
             // Preview
             if let Err(e) = resize_and_save_webp(
-                &img, config.preview_width, &preview_path,
+                &img,
+                config.preview_width,
+                config.preview_quality,
+                &preview_path,
             ) {
-                return make_error(
-                    &source_str, start,
-                    &format!("Preview: {}", e),
-                );
+                return make_error(&source_str, start, &format!("Preview: {}", e));
             }
 
-            let thumb_size = fs::metadata(&thumb_path)
-                .map(|m| m.len())
-                .unwrap_or(0);
-            let preview_size = fs::metadata(&preview_path)
-                .map(|m| m.len())
-                .unwrap_or(0);
+            let thumb_size = fs::metadata(&thumb_path).map(|m| m.len()).unwrap_or(0);
+            let preview_size = fs::metadata(&preview_path).map(|m| m.len()).unwrap_or(0);
 
             ImageProcessResult {
                 source_path: source_str,
-                thumb_path: thumb_path
-                    .to_string_lossy().to_string(),
-                preview_path: preview_path
-                    .to_string_lossy().to_string(),
+                thumb_path: thumb_path.to_string_lossy().to_string(),
+                preview_path: preview_path.to_string_lossy().to_string(),
                 thumb_size,
                 preview_size,
                 duration_ms: start.elapsed().as_millis() as u64,
@@ -234,6 +198,7 @@ pub fn process_batch(
 fn resize_and_save_webp(
     img: &DynamicImage,
     max_width: u32,
+    quality: u8,
     output: &Path,
 ) -> anyhow::Result<()> {
     // Only resize if image is wider than target
@@ -247,23 +212,15 @@ fn resize_and_save_webp(
 
     // Save as WebP using the image crate's built-in encoder
     let rgba = resized.to_rgba8();
-    let file = fs::File::create(output)?;
-    let encoder = WebPEncoder::new_lossless(file);
-    encoder.encode(
-        rgba.as_raw(),
-        rgba.width(),
-        rgba.height(),
-        image::ExtendedColorType::Rgba8,
-    )?;
+    let q = quality.clamp(1, 100) as f32;
+    let encoder = Encoder::from_rgba(rgba.as_raw(), rgba.width(), rgba.height());
+    let webp = encoder.encode(q);
+    fs::write(output, &*webp)?;
 
     Ok(())
 }
 
-fn make_error(
-    source: &str,
-    start: Instant,
-    msg: &str,
-) -> ImageProcessResult {
+fn make_error(source: &str, start: Instant, msg: &str) -> ImageProcessResult {
     ImageProcessResult {
         source_path: source.to_string(),
         thumb_path: String::new(),

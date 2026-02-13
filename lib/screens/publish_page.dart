@@ -26,6 +26,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
   String? _sourceFolder;
   R2Account? _selectedR2Account;
   bool _uploadOriginals = false;
+  bool _scanRecursive = true;
 
   @override
   void dispose() {
@@ -61,11 +62,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           const SizedBox(height: 24),
 
           // Content based on upload status
-          Expanded(
-            child: _buildContent(
-              uploadState, settings, theme,
-            ),
-          ),
+          Expanded(child: _buildContent(uploadState, settings, theme)),
         ],
       ),
     );
@@ -92,9 +89,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   // ── Setup Form ──
 
-  Widget _buildSetupForm(
-    SettingsState settings, ThemeData theme,
-  ) {
+  Widget _buildSetupForm(SettingsState settings, ThemeData theme) {
     final accounts = settings.r2Accounts;
 
     return SingleChildScrollView(
@@ -111,8 +106,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              prefixIcon:
-                  const Icon(Icons.event, size: 20),
+              prefixIcon: const Icon(Icons.event, size: 20),
             ),
           ),
           const SizedBox(height: 20),
@@ -121,6 +115,8 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           _sectionTitle('Source Folder', theme),
           const SizedBox(height: 8),
           _buildFolderPicker(theme),
+          const SizedBox(height: 12),
+          _buildScanOptions(theme),
           const SizedBox(height: 20),
 
           // R2 Account
@@ -163,9 +159,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
   Widget _sectionTitle(String title, ThemeData theme) {
     return Text(
       title,
-      style: theme.textTheme.titleSmall?.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
+      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 
@@ -176,18 +170,12 @@ class _PublishPageState extends ConsumerState<PublishPage> {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          border: Border.all(
-            color: theme.colorScheme.outline.withAlpha(128),
-          ),
+          border: Border.all(color: theme.colorScheme.outline.withAlpha(128)),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.folder_open,
-              color: theme.colorScheme.primary,
-              size: 20,
-            ),
+            Icon(Icons.folder_open, color: theme.colorScheme.primary, size: 20),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -195,8 +183,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: _sourceFolder != null
                       ? null
-                      : theme.colorScheme.onSurface
-                          .withAlpha(128),
+                      : theme.colorScheme.onSurface.withAlpha(128),
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -212,16 +199,13 @@ class _PublishPageState extends ConsumerState<PublishPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        border: Border.all(
-          color: theme.colorScheme.error.withAlpha(128),
-        ),
+        border: Border.all(color: theme.colorScheme.error.withAlpha(128)),
         borderRadius: BorderRadius.circular(8),
         color: theme.colorScheme.error.withAlpha(20),
       ),
       child: Row(
         children: [
-          Icon(Icons.warning_amber,
-              color: theme.colorScheme.error, size: 20),
+          Icon(Icons.warning_amber, color: theme.colorScheme.error, size: 20),
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
@@ -234,22 +218,41 @@ class _PublishPageState extends ConsumerState<PublishPage> {
     );
   }
 
-  Widget _buildAccountDropdown(
-    List<R2Account> accounts, ThemeData theme,
-  ) {
+  Widget _buildScanOptions(ThemeData theme) {
+    return Row(
+      children: [
+        Checkbox(
+          value: _scanRecursive,
+          onChanged: (value) {
+            setState(() {
+              _scanRecursive = value ?? true;
+            });
+          },
+        ),
+        Expanded(
+          child: Text(
+            'Scan subfolder (recursive)',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAccountDropdown(List<R2Account> accounts, ThemeData theme) {
     return DropdownButtonFormField<R2Account>(
       initialValue: _selectedR2Account,
       decoration: InputDecoration(
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         prefixIcon: const Icon(Icons.cloud, size: 20),
       ),
       items: accounts
-          .map((a) => DropdownMenuItem(
-                value: a,
-                child: Text('${a.name} (${a.bucket})'),
-              ))
+          .map(
+            (a) => DropdownMenuItem(
+              value: a,
+              child: Text('${a.name} (${a.bucket})'),
+            ),
+          )
           .toList(),
       onChanged: (v) => setState(() {
         _selectedR2Account = v;
@@ -262,17 +265,14 @@ class _PublishPageState extends ConsumerState<PublishPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(
-          color: theme.colorScheme.outline.withAlpha(128),
-        ),
+        border: Border.all(color: theme.colorScheme.outline.withAlpha(128)),
         borderRadius: BorderRadius.circular(8),
       ),
       child: SwitchListTile(
         title: const Text('Upload originals to Google Drive'),
         subtitle: const Text('15-20MB per file (optional)'),
         value: _uploadOriginals,
-        onChanged: (v) =>
-            setState(() => _uploadOriginals = v),
+        onChanged: (v) => setState(() => _uploadOriginals = v),
         secondary: const Icon(Icons.add_to_drive, size: 24),
         contentPadding: EdgeInsets.zero,
       ),
@@ -281,14 +281,10 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   // ── Progress View ──
 
-  Widget _buildProgressView(
-    UploadState uploadState, ThemeData theme,
-  ) {
+  Widget _buildProgressView(UploadState uploadState, ThemeData theme) {
     final progress = uploadState.progress;
     if (progress == null) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     return Column(
@@ -300,15 +296,9 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           color: theme.colorScheme.primary,
         ),
         const SizedBox(height: 16),
-        Text(
-          _phaseLabel(progress.phase),
-          style: theme.textTheme.titleMedium,
-        ),
+        Text(_phaseLabel(progress.phase), style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(
-          progress.message,
-          style: theme.textTheme.bodyMedium,
-        ),
+        Text(progress.message, style: theme.textTheme.bodyMedium),
         const SizedBox(height: 24),
         LinearProgressIndicator(
           value: progress.overallProgress,
@@ -325,8 +315,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           Text(
             progress.currentFileName,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurface
-                  .withAlpha(128),
+              color: theme.colorScheme.onSurface.withAlpha(128),
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -338,9 +327,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           },
           icon: const Icon(Icons.cancel, size: 18),
           label: const Text('Cancel'),
-          style: TextButton.styleFrom(
-            foregroundColor: theme.colorScheme.error,
-          ),
+          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
         ),
         const SizedBox(height: 16),
         // Log panel
@@ -351,18 +338,12 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   // ── Result View ──
 
-  Widget _buildResultView(
-    UploadState uploadState, ThemeData theme,
-  ) {
+  Widget _buildResultView(UploadState uploadState, ThemeData theme) {
     final p = uploadState.progress;
     return Column(
       children: [
         const SizedBox(height: 24),
-        Icon(
-          Icons.check_circle,
-          size: 64,
-          color: Colors.green.shade400,
-        ),
+        Icon(Icons.check_circle, size: 64, color: Colors.green.shade400),
         const SizedBox(height: 16),
         Text(
           'Gallery Published!',
@@ -395,18 +376,12 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   // ── Error View ──
 
-  Widget _buildErrorView(
-    UploadState uploadState, ThemeData theme,
-  ) {
+  Widget _buildErrorView(UploadState uploadState, ThemeData theme) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: theme.colorScheme.error,
-          ),
+          Icon(Icons.error_outline, size: 64, color: theme.colorScheme.error),
           const SizedBox(height: 16),
           Text(
             'Upload Failed',
@@ -437,8 +412,9 @@ class _PublishPageState extends ConsumerState<PublishPage> {
   // ── Actions ──
 
   Future<void> _pickFolder() async {
-    final result = await FilePicker.platform
-        .getDirectoryPath(dialogTitle: 'Select Photo Folder');
+    final result = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select Photo Folder',
+    );
     if (result != null) {
       setState(() {
         _sourceFolder = result;
@@ -456,13 +432,22 @@ class _PublishPageState extends ConsumerState<PublishPage> {
   }
 
   void _startPublish() {
+    final settings = ref.read(settingsProvider);
+    final extensions = {
+      ...settings.rawExtensions,
+      ...settings.jpgExtensions,
+      'png',
+    }.map((e) => e.toLowerCase()).toList();
     final config = UploadConfig(
       eventName: _eventNameController.text,
       sourceFolder: _sourceFolder!,
       r2Account: _selectedR2Account,
       uploadOriginalToDrive: _uploadOriginals,
-      googleDriveCredentialsPath: ref.read(settingsProvider)
+      googleDriveCredentialsPath: ref
+          .read(settingsProvider)
           .googleDriveCredentialsPath,
+      recursiveScan: _scanRecursive,
+      extensions: extensions,
     );
 
     ref.read(uploadProvider.notifier).startUpload(config);
@@ -470,9 +455,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   // ── Log Panel ──
 
-  Widget _buildLogPanel(
-    UploadState uploadState, ThemeData theme,
-  ) {
+  Widget _buildLogPanel(UploadState uploadState, ThemeData theme) {
     final logs = uploadState.logs;
     if (logs.isEmpty) {
       return const SizedBox.shrink();
@@ -496,9 +479,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           ),
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               itemCount: logs.length,
               itemBuilder: (_, i) {
                 final log = logs[i];
@@ -506,8 +487,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
                   LogLevel.success => Colors.green.shade300,
                   LogLevel.warning => Colors.orange.shade300,
                   LogLevel.error => Colors.red.shade300,
-                  _ => theme.colorScheme.onSurface
-                      .withAlpha(180),
+                  _ => theme.colorScheme.onSurface.withAlpha(180),
                 };
                 final icon = switch (log.level) {
                   LogLevel.success => '✓',
@@ -520,8 +500,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
                     '${log.timestamp.minute.toString().padLeft(2, '0')}:'
                     '${log.timestamp.second.toString().padLeft(2, '0')}';
                 return Padding(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 1),
+                  padding: const EdgeInsets.symmetric(vertical: 1),
                   child: Text(
                     '$time $icon ${log.message}',
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -556,9 +535,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
     );
   }
 
-  Widget _buildHistoryItem(
-    PublishRecord record, ThemeData theme,
-  ) {
+  Widget _buildHistoryItem(PublishRecord record, ThemeData theme) {
     final date =
         '${record.publishedAt.day}/${record.publishedAt.month}'
         '/${record.publishedAt.year} '
@@ -570,16 +547,12 @@ class _PublishPageState extends ConsumerState<PublishPage> {
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(8),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.white.withAlpha(15),
-        ),
+        border: Border.all(color: Colors.white.withAlpha(15)),
       ),
       child: Row(
         children: [
           Icon(
-            record.isSuccess
-                ? Icons.check_circle
-                : Icons.error,
+            record.isSuccess ? Icons.check_circle : Icons.error,
             size: 18,
             color: record.isSuccess
                 ? Colors.green.shade400
@@ -610,8 +583,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
             icon: const Icon(Icons.delete_outline, size: 16),
             color: GlassColors.systemGray,
             onPressed: () {
-              ref.read(publishHistoryProvider.notifier)
-                  .removeRecord(record.id);
+              ref.read(publishHistoryProvider.notifier).removeRecord(record.id);
             },
           ),
         ],

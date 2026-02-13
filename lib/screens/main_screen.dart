@@ -76,9 +76,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       decoration: BoxDecoration(
         color: GlassColors.sidebarBg,
         border: Border(
-          right: BorderSide(
-            color: Colors.white.withValues(alpha: 0.06),
-          ),
+          right: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
         ),
       ),
       child: Column(
@@ -194,7 +192,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Widget _buildComingSoon() {
-    final labels = ['Copy', 'Gallery', 'Publish', 'Schedule', 'Reports', 'Settings'];
+    final labels = [
+      'Copy',
+      'Gallery',
+      'Publish',
+      'Schedule',
+      'Reports',
+      'Settings',
+    ];
     final label = _selectedNavIndex < labels.length
         ? labels[_selectedNavIndex]
         : 'Page';
@@ -210,10 +215,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           const SizedBox(height: 16),
           Text(
             '$label — coming soon',
-            style: const TextStyle(
-              color: GlassColors.systemGray,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: GlassColors.systemGray, fontSize: 14),
           ),
         ],
       ),
@@ -237,16 +239,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Left: Source + File List
-                Expanded(
-                  flex: 5,
-                  child: _buildLeftPanel(copyState),
-                ),
+                Expanded(flex: 5, child: _buildLeftPanel(copyState)),
                 const SizedBox(width: 16),
                 // Right: Progress + Controls + Log
-                Expanded(
-                  flex: 3,
-                  child: _buildRightPanel(copyState, stats),
-                ),
+                Expanded(flex: 3, child: _buildRightPanel(copyState, stats)),
               ],
             ),
           ),
@@ -265,19 +261,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       decoration: BoxDecoration(
         color: GlassColors.bgDarkSecondary,
         border: Border(
-          bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.06),
-          ),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
         ),
       ),
       child: Row(
         children: [
           GradientText(
             'Hafiportrait Manager',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             gradient: GlassColors.accentGradient,
           ),
           const Spacer(),
@@ -447,16 +438,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 color: GlassColors.liquidIndigo,
               ),
               const SizedBox(width: 8),
-              Text(
-                'File List',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('File List', style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: GlassColors.bgDarkTertiary,
                   borderRadius: BorderRadius.circular(6),
@@ -486,8 +471,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 height: 1.6,
               ),
               decoration: const InputDecoration(
-                hintText:
-                    'Enter file names (without ext), one per line...',
+                hintText: 'Enter file names (without ext), one per line...',
               ),
               onChanged: (value) {
                 final names = value
@@ -607,8 +591,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             ),
           Text(
             FileItem.formatFileSize(
-              copyState.validFiles
-                  .fold<int>(0, (s, f) => s + f.size),
+              copyState.validFiles.fold<int>(0, (s, f) => s + f.size),
             ),
             style: const TextStyle(
               color: GlassColors.systemGray2,
@@ -643,10 +626,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         children: [
           Row(
             children: [
-              Text(
-                'Progress',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('Progress', style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               Text(
                 '${stats.progressPercent.toStringAsFixed(1)}%',
@@ -711,16 +691,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         Container(
           width: 6,
           height: 6,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        Text(
-          '$value $label',
-          style: TextStyle(color: color, fontSize: 11),
-        ),
+        Text('$value $label', style: TextStyle(color: color, fontSize: 11)),
       ],
     );
   }
@@ -741,12 +715,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               label: isCopying
                   ? 'COPYING...'
                   : isPaused
-                      ? 'PAUSED'
-                      : 'START COPY',
+                  ? 'PAUSED'
+                  : 'START COPY',
               icon: isActive ? null : Icons.rocket_launch_rounded,
               isLoading: isCopying,
-              onPressed:
-                  (!isActive && hasValidFiles) ? _startCopy : null,
+              onPressed: (!isActive && hasValidFiles) ? _startCopy : null,
             ),
           ),
           const SizedBox(height: 10),
@@ -792,10 +765,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 color: GlassColors.systemGray,
               ),
               const SizedBox(width: 6),
-              Text(
-                'Log',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('Log', style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               if (_statusLogs.isNotEmpty)
                 InkWell(
@@ -872,8 +842,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
         statusText = 'Validating...';
         statusColor = GlassColors.liquidBlue;
       case CopyStatus.copying:
-        statusText =
-            'Copying: ${copyState.progress?.currentFileName ?? ""}';
+        statusText = 'Copying: ${copyState.progress?.currentFileName ?? ""}';
         statusColor = GlassColors.liquidBlue;
       case CopyStatus.paused:
         statusText = 'Paused';
@@ -920,10 +889,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           const Spacer(),
           Text(
             '${Platform.operatingSystem.toUpperCase()} • Flutter',
-            style: const TextStyle(
-              color: GlassColors.systemGray,
-              fontSize: 11,
-            ),
+            style: const TextStyle(color: GlassColors.systemGray, fontSize: 11),
           ),
         ],
       ),
@@ -987,11 +953,14 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     _addLog('🔍 Scanning...');
     final service = ref.read(fileOperationServiceProvider);
     final files = await service.scanFolder(copyState.sourceFolder);
-    final names = files.map((f) {
-      final name = f.name;
-      final dot = name.lastIndexOf('.');
-      return dot >= 0 ? name.substring(0, dot) : name;
-    }).toSet().toList();
+    final names = files
+        .map((f) {
+          final name = f.name;
+          final dot = name.lastIndexOf('.');
+          return dot >= 0 ? name.substring(0, dot) : name;
+        })
+        .toSet()
+        .toList();
     _fileListController.text = names.join('\n');
     ref.read(copyProvider.notifier).setFileNames(names);
     setState(() {});
@@ -1013,9 +982,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     await ref.read(copyProvider.notifier).startCopy();
     final state = ref.read(copyProvider);
     if (state.status == CopyStatus.completed) {
-      _addLog(
-        '✅ Done! ${state.result?.performanceGrade ?? ""}',
-      );
+      _addLog('✅ Done! ${state.result?.performanceGrade ?? ""}');
     } else if (state.status == CopyStatus.idle) {
       _addLog('❌ Copy cancelled');
     }
@@ -1037,14 +1004,25 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     _addLog('❌ Cancelled');
   }
 
-  void _handleDrop(DropDoneDetails details) {
+  Future<void> _handleDrop(DropDoneDetails details) async {
     final files = details.files;
     if (files.isEmpty) return;
 
     final imageExtensions = {
-      'cr2', 'cr3', 'nef', 'arw', 'raf', 'orf',
-      'rw2', 'dng', 'raw', 'pef', 'srw',
-      'jpg', 'jpeg', 'png',
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'raf',
+      'orf',
+      'rw2',
+      'dng',
+      'raw',
+      'pef',
+      'srw',
+      'jpg',
+      'jpeg',
+      'png',
     };
 
     for (final xFile in files) {
@@ -1063,7 +1041,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
       if (ext == 'txt') {
         // Dropped a .txt file → parse lines as file names
         try {
-          final contents = File(path).readAsStringSync();
+          final contents = await File(path).readAsString();
           final names = contents
               .split('\n')
               .map((l) => l.trim())
@@ -1072,19 +1050,19 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
           if (names.isNotEmpty) {
             final existing = _fileListController.text;
-            final separator = existing.isNotEmpty &&
-                    !existing.endsWith('\n')
+            final separator = existing.isNotEmpty && !existing.endsWith('\n')
                 ? '\n'
                 : '';
-            _fileListController.text =
-                '$existing$separator${names.join('\n')}';
-            ref.read(copyProvider.notifier).setFileNames(
-              _fileListController.text
-                  .split('\n')
-                  .where((l) => l.trim().isNotEmpty)
-                  .map((l) => l.trim())
-                  .toList(),
-            );
+            _fileListController.text = '$existing$separator${names.join('\n')}';
+            ref
+                .read(copyProvider.notifier)
+                .setFileNames(
+                  _fileListController.text
+                      .split('\n')
+                      .where((l) => l.trim().isNotEmpty)
+                      .map((l) => l.trim())
+                      .toList(),
+                );
             _addLog('📄 Imported ${names.length} names from TXT');
             setState(() {}); // update counter
           }
@@ -1102,12 +1080,10 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             : fileName;
 
         final existing = _fileListController.text;
-        final separator = existing.isNotEmpty &&
-                !existing.endsWith('\n')
+        final separator = existing.isNotEmpty && !existing.endsWith('\n')
             ? '\n'
             : '';
-        _fileListController.text =
-            '$existing$separator$nameWithoutExt';
+        _fileListController.text = '$existing$separator$nameWithoutExt';
         _addLog('🖼️ Added: $nameWithoutExt');
       }
     }

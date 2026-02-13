@@ -38,15 +38,15 @@ class R2Account {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'accountId': accountId,
-        'accessKey': accessKey,
-        'secretKey': secretKey,
-        'bucket': bucket,
-        'endpoint': endpoint,
-        'publicUrl': publicUrl,
-      };
+    'id': id,
+    'name': name,
+    'accountId': accountId,
+    'accessKey': accessKey,
+    'secretKey': secretKey,
+    'bucket': bucket,
+    'endpoint': endpoint,
+    'publicUrl': publicUrl,
+  };
 
   factory R2Account.fromJson(Map<String, dynamic> json) {
     return R2Account(
@@ -64,9 +64,7 @@ class R2Account {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is R2Account &&
-          runtimeType == other.runtimeType &&
-          id == other.id;
+      other is R2Account && runtimeType == other.runtimeType && id == other.id;
 
   @override
   int get hashCode => id.hashCode;
@@ -79,6 +77,8 @@ class UploadConfig {
   final R2Account? r2Account;
   final bool uploadOriginalToDrive;
   final String? googleDriveCredentialsPath;
+  final bool recursiveScan;
+  final List<String> extensions;
   final int thumbWidth;
   final int previewWidth;
   final int thumbQuality;
@@ -90,6 +90,23 @@ class UploadConfig {
     this.r2Account,
     this.uploadOriginalToDrive = false,
     this.googleDriveCredentialsPath,
+    this.recursiveScan = true,
+    this.extensions = const [
+      'jpg',
+      'jpeg',
+      'png',
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'raf',
+      'orf',
+      'rw2',
+      'dng',
+      'raw',
+      'pef',
+      'srw',
+    ],
     this.thumbWidth = 400,
     this.previewWidth = 1920,
     this.thumbQuality = 80,
@@ -114,13 +131,12 @@ class GalleryManifest {
   });
 
   Map<String, dynamic> toJson() => {
-        'eventName': eventName,
-        'createdAt': createdAt.toIso8601String(),
-        'totalPhotos': totalPhotos,
-        'photos': photos.map((p) => p.toJson()).toList(),
-        if (driveFolderId != null)
-          'driveFolderId': driveFolderId,
-      };
+    'eventName': eventName,
+    'createdAt': createdAt.toIso8601String(),
+    'totalPhotos': totalPhotos,
+    'photos': photos.map((p) => p.toJson()).toList(),
+    if (driveFolderId != null) 'driveFolderId': driveFolderId,
+  };
 }
 
 /// Single photo entry in gallery manifest
@@ -136,8 +152,8 @@ class GalleryPhoto {
   });
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'thumb': thumbKey,
-        'preview': previewKey,
-      };
+    'name': name,
+    'thumb': thumbKey,
+    'preview': previewKey,
+  };
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -12,7 +13,7 @@ class FileOperationService {
   final PerformanceSettings settings;
 
   FileOperationService({PerformanceSettings? settings})
-      : settings = settings ?? PerformanceSettings.autoConfigure();
+    : settings = settings ?? PerformanceSettings.autoConfigure();
 
   // ── Pause / Cancel state ──
 
@@ -63,9 +64,19 @@ class FileOperationService {
     required String sourceFolder,
     required List<String> fileNames,
     List<String> extensions = const [
-      'cr2', 'cr3', 'nef', 'arw', 'raf', 'orf',
-      'rw2', 'dng', 'raw', 'pef', 'srw',
-      'jpg', 'jpeg',
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'raf',
+      'orf',
+      'rw2',
+      'dng',
+      'raw',
+      'pef',
+      'srw',
+      'jpg',
+      'jpeg',
     ],
   }) async {
     return Isolate.run(() {
@@ -73,20 +84,17 @@ class FileOperationService {
       if (!dir.existsSync()) {
         return const ValidationResult(
           invalidFiles: [
-            InvalidFileItem(
-              path: '',
-              reason: 'Source folder does not exist',
-            ),
+            InvalidFileItem(path: '', reason: 'Source folder does not exist'),
           ],
         );
       }
 
       // Scan all files in source folder
-      final allFiles = <String, FileSystemEntity>{};
+      final allFiles = <String, List<File>>{};
       for (final entity in dir.listSync(recursive: true)) {
         if (entity is File) {
-          final name = _fileNameWithoutExt(entity.path);
-          allFiles[name.toLowerCase()] = entity;
+          final name = _fileNameWithoutExt(entity.path).toLowerCase();
+          allFiles.putIfAbsent(name, () => []).add(entity);
         }
       }
 
@@ -107,33 +115,33 @@ class FileOperationService {
         seenNames.add(trimmed.toLowerCase());
 
         // Search for matching files
-        bool found = false;
         final key = trimmed.toLowerCase();
-        for (final entry in allFiles.entries) {
-          if (entry.key == key) {
-            final file = File(entry.value.path);
-            final ext2 = _fileExtension(file.path);
-            if (extensions.any(
-              (e) => e.toLowerCase() == ext2.toLowerCase(),
-            )) {
-              final stat = file.statSync();
-              validFiles.add(FileItem(
+        final matches = allFiles[key] ?? const [];
+        bool found = false;
+        for (final file in matches) {
+          final ext2 = _fileExtension(file.path).toLowerCase();
+          if (extensions.any((e) => e.toLowerCase() == ext2)) {
+            final stat = file.statSync();
+            validFiles.add(
+              FileItem(
                 path: file.path,
                 name: _fileName(file.path),
                 size: stat.size,
                 createdDate: stat.changed,
                 modifiedDate: stat.modified,
-              ));
-              found = true;
-            }
+              ),
+            );
+            found = true;
           }
         }
 
         if (!found) {
-          invalidFiles.add(InvalidFileItem(
-            path: trimmed,
-            reason: 'File not found in source folder',
-          ));
+          invalidFiles.add(
+            InvalidFileItem(
+              path: trimmed,
+              reason: 'File not found in source folder',
+            ),
+          );
         }
       }
 
@@ -161,6 +169,10 @@ class FileOperationService {
   }) async* {
     _resetFlags();
 
+    if (files.isEmpty) {
+      return;
+    }
+
     final startTime = DateTime.now();
     final totalBytes = files.fold<int>(0, (sum, f) => sum + f.size);
     var processedFiles = 0;
@@ -168,13 +180,127 @@ class FileOperationService {
     var skippedCount = 0;
     var failedCount = 0;
 
+    final parallelism = settings.maxParallelism.clamp(1, files.length);
+    if (parallelism > 1) {
+      final controller = StreamController<CopyProgress>();
+      final queue = ListQueue<FileItem>.from(files);
+
+      Future<void> worker() async {
+        while (true) {
+          if (_isCancelled) return;
+          if (queue.isEmpty) return;
+
+          final file = queue.removeFirst();
+
+          if (_isPaused) {
+            controller.add(
+              _makeProgress(
+                files.length,
+                processedFiles,
+                '⏸ Paused',
+                bytesCopied,
+                totalBytes,
+                startTime,
+                skippedCount,
+                failedCount,
+              ),
+            );
+            await _pauseCompleter?.future;
+            if (_isCancelled) return;
+          }
+
+          final subFolder = file.isRaw ? 'RAW' : 'JPG';
+          final destDir = Directory(
+            '$destinationFolder${Platform.pathSeparator}$subFolder',
+          );
+
+          if (!destDir.existsSync()) {
+            destDir.createSync(recursive: true);
+          }
+
+          final destPath =
+              '${destDir.path}${Platform.pathSeparator}${file.name}';
+
+          try {
+            if (skipExisting) {
+              final destFile = File(destPath);
+              if (destFile.existsSync() && destFile.lengthSync() == file.size) {
+                skippedCount++;
+                processedFiles++;
+                controller.add(
+                  _makeProgress(
+                    files.length,
+                    processedFiles,
+                    file.name,
+                    bytesCopied,
+                    totalBytes,
+                    startTime,
+                    skippedCount,
+                    failedCount,
+                  ),
+                );
+                continue;
+              }
+            }
+
+            await File(file.path).copy(destPath);
+            bytesCopied += file.size;
+          } catch (e) {
+            failedCount++;
+          }
+
+          processedFiles++;
+
+          controller.add(
+            _makeProgress(
+              files.length,
+              processedFiles,
+              file.name,
+              bytesCopied,
+              totalBytes,
+              startTime,
+              skippedCount,
+              failedCount,
+            ),
+          );
+        }
+      }
+
+      final workers = List.generate(parallelism, (_) => worker());
+      Future.wait(workers).then((_) {
+        if (_isCancelled) {
+          controller.add(
+            _makeProgress(
+              files.length,
+              processedFiles,
+              'Cancelled',
+              bytesCopied,
+              totalBytes,
+              startTime,
+              skippedCount,
+              failedCount,
+            ),
+          );
+        }
+        controller.close();
+      });
+
+      yield* controller.stream;
+      return;
+    }
+
     for (final file in files) {
       // ── Check cancel ──
       if (_isCancelled) {
         yield _makeProgress(
-          files.length, processedFiles, 'Cancelled',
-          bytesCopied, totalBytes, startTime,
-          skippedCount, failedCount,
+          files.length,
+          processedFiles,
+          'Cancelled',
+          bytesCopied,
+          totalBytes,
+          startTime,
+          skippedCount,
+          failedCount,
         );
         return;
       }
@@ -182,17 +308,27 @@ class FileOperationService {
       // ── Check pause ──
       if (_isPaused) {
         yield _makeProgress(
-          files.length, processedFiles, '⏸ Paused',
-          bytesCopied, totalBytes, startTime,
-          skippedCount, failedCount,
+          files.length,
+          processedFiles,
+          '⏸ Paused',
+          bytesCopied,
+          totalBytes,
+          startTime,
+          skippedCount,
+          failedCount,
         );
         await _pauseCompleter?.future;
         // After resume, check cancel again
         if (_isCancelled) {
           yield _makeProgress(
-            files.length, processedFiles, 'Cancelled',
-            bytesCopied, totalBytes, startTime,
-            skippedCount, failedCount,
+            files.length,
+            processedFiles,
+            'Cancelled',
+            bytesCopied,
+            totalBytes,
+            startTime,
+            skippedCount,
+            failedCount,
           );
           return;
         }
@@ -207,15 +343,13 @@ class FileOperationService {
         destDir.createSync(recursive: true);
       }
 
-      final destPath =
-          '${destDir.path}${Platform.pathSeparator}${file.name}';
+      final destPath = '${destDir.path}${Platform.pathSeparator}${file.name}';
 
       try {
         // Smart copy: skip if same size
         if (skipExisting) {
           final destFile = File(destPath);
-          if (destFile.existsSync() &&
-              destFile.lengthSync() == file.size) {
+          if (destFile.existsSync() && destFile.lengthSync() == file.size) {
             skippedCount++;
             processedFiles++;
             continue;
@@ -232,9 +366,14 @@ class FileOperationService {
       processedFiles++;
 
       yield _makeProgress(
-        files.length, processedFiles, file.name,
-        bytesCopied, totalBytes, startTime,
-        skippedCount, failedCount,
+        files.length,
+        processedFiles,
+        file.name,
+        bytesCopied,
+        totalBytes,
+        startTime,
+        skippedCount,
+        failedCount,
       );
     }
   }
@@ -251,8 +390,7 @@ class FileOperationService {
   ) {
     final elapsed = DateTime.now().difference(startTime);
     final speedMBps = elapsed.inMilliseconds > 0
-        ? (bytesCopied / 1024 / 1024) /
-            (elapsed.inMilliseconds / 1000)
+        ? (bytesCopied / 1024 / 1024) / (elapsed.inMilliseconds / 1000)
         : 0.0;
 
     return CopyProgress(
@@ -274,9 +412,20 @@ class FileOperationService {
   Future<List<FileItem>> scanFolder(
     String folderPath, {
     List<String> extensions = const [
-      'cr2', 'cr3', 'nef', 'arw', 'raf', 'orf',
-      'rw2', 'dng', 'raw', 'pef', 'srw',
-      'jpg', 'jpeg', 'png',
+      'cr2',
+      'cr3',
+      'nef',
+      'arw',
+      'raf',
+      'orf',
+      'rw2',
+      'dng',
+      'raw',
+      'pef',
+      'srw',
+      'jpg',
+      'jpeg',
+      'png',
     ],
   }) async {
     return Isolate.run(() {
@@ -290,13 +439,15 @@ class FileOperationService {
           final ext = _fileExtension(entity.path).toLowerCase();
           if (extensions.any((e) => e.toLowerCase() == ext)) {
             final stat = entity.statSync();
-            results.add(FileItem(
-              path: entity.path,
-              name: _fileName(entity.path),
-              size: stat.size,
-              createdDate: stat.changed,
-              modifiedDate: stat.modified,
-            ));
+            results.add(
+              FileItem(
+                path: entity.path,
+                name: _fileName(entity.path),
+                size: stat.size,
+                createdDate: stat.changed,
+                modifiedDate: stat.modified,
+              ),
+            );
           }
         }
       }

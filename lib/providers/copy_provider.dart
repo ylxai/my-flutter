@@ -2,12 +2,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/file_item.dart';
 import '../models/copy_result.dart';
+import '../models/performance_settings.dart';
+import '../providers/settings_provider.dart';
 import '../services/file_operation_service.dart';
 
 // ── Services ──
 
 final fileOperationServiceProvider = Provider<FileOperationService>((ref) {
-  return FileOperationService();
+  final settings = ref.watch(settingsProvider);
+  final perf = PerformanceSettings(
+    maxParallelism: settings.maxParallelism,
+    mode: settings.copyMode,
+  );
+  return FileOperationService(settings: perf);
 });
 
 // ── Copy State ──
@@ -68,10 +75,7 @@ class CopyNotifier extends StateNotifier<CopyState> {
   CopyNotifier(this._fileService) : super(const CopyState());
 
   void setSourceFolder(String path) {
-    state = state.copyWith(
-      sourceFolder: path,
-      status: CopyStatus.idle,
-    );
+    state = state.copyWith(sourceFolder: path, status: CopyStatus.idle);
   }
 
   void setFileNames(List<String> names) {
@@ -121,10 +125,7 @@ class CopyNotifier extends StateNotifier<CopyState> {
             ? CopyStatus.paused
             : CopyStatus.copying;
 
-        state = state.copyWith(
-          progress: progress,
-          status: currentStatus,
-        );
+        state = state.copyWith(progress: progress, status: currentStatus);
       }
 
       // Check if cancelled
@@ -175,8 +176,7 @@ class CopyNotifier extends StateNotifier<CopyState> {
   }
 }
 
-final copyProvider =
-    StateNotifierProvider<CopyNotifier, CopyState>((ref) {
+final copyProvider = StateNotifierProvider<CopyNotifier, CopyState>((ref) {
   final service = ref.watch(fileOperationServiceProvider);
   return CopyNotifier(service);
 });

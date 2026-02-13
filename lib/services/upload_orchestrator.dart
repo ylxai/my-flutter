@@ -37,6 +37,9 @@ class UploadProgress {
   final String currentFileName;
   final String message;
   final double overallProgress;
+  final int successCount;
+  final int failedCount;
+  final Duration totalDuration;
 
   const UploadProgress({
     required this.phase,
@@ -45,6 +48,9 @@ class UploadProgress {
     this.currentFileName = '',
     this.message = '',
     this.overallProgress = 0.0,
+    this.successCount = 0,
+    this.failedCount = 0,
+    this.totalDuration = Duration.zero,
   });
 }
 
@@ -98,7 +104,14 @@ class UploadOrchestrator {
       message: 'Scanning source folder...',
     );
 
-    final imageFiles = _scanForImages(config.sourceFolder);
+    final scannedFiles = _scanForImages(
+      config.sourceFolder,
+      recursive: config.recursiveScan,
+      extensions: config.extensions,
+    );
+    final imageFiles = scannedFiles
+        .where((f) => _isProcessableImage(f.path))
+        .toList();
     if (imageFiles.isEmpty) {
       yield const UploadProgress(
         phase: UploadPhase.error,
@@ -198,20 +211,21 @@ class UploadOrchestrator {
       driveFolderId = await _driveService.createFolder(config.eventName);
       await _driveService.makeFolderPublic(driveFolderId);
 
-      for (int i = 0; i < imageFiles.length; i++) {
+      final driveFiles = scannedFiles;
+      for (int i = 0; i < driveFiles.length; i++) {
         if (_isCancelled) return;
 
         yield UploadProgress(
           phase: UploadPhase.uploadingToDrive,
           currentFile: i + 1,
-          totalFiles: totalFiles,
-          currentFileName: p.basename(imageFiles[i].path),
-          message: 'Uploading to Drive ${i + 1}/$totalFiles...',
-          overallProgress: 0.7 + ((i + 1) / totalFiles) * 0.25,
+          totalFiles: driveFiles.length,
+          currentFileName: p.basename(driveFiles[i].path),
+          message: 'Uploading to Drive ${i + 1}/${driveFiles.length}...',
+          overallProgress: 0.7 + ((i + 1) / driveFiles.length) * 0.25,
         );
 
         await _driveService.uploadFile(
-          filePath: imageFiles[i].path,
+          filePath: driveFiles[i].path,
           folderId: driveFolderId,
         );
       }
@@ -259,21 +273,35 @@ class UploadOrchestrator {
       currentFile: totalFiles,
       message: 'Upload complete!',
       overallProgress: 1.0,
+      successCount: totalFiles,
+      failedCount: 0,
+      totalDuration: stopwatch.elapsed,
     );
   }
 
   // ── Private helpers ──
 
-  List<File> _scanForImages(String folderPath) {
+  List<File> _scanForImages(
+    String folderPath, {
+    required bool recursive,
+    required List<String> extensions,
+  }) {
     final dir = Directory(folderPath);
     if (!dir.existsSync()) return [];
 
-    final extensions = {'.jpg', '.jpeg', '.png'};
-    return dir.listSync(recursive: false).whereType<File>().where((f) {
-        final ext = p.extension(f.path).toLowerCase();
-        return extensions.contains(ext);
+    final normalized = extensions
+        .map((e) => e.toLowerCase().replaceFirst('.', ''))
+        .toSet();
+    return dir.listSync(recursive: recursive).whereType<File>().where((f) {
+        final ext = p.extension(f.path).toLowerCase().replaceFirst('.', '');
+        return normalized.contains(ext);
       }).toList()
       ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+  }
+
+  bool _isProcessableImage(String path) {
+    final ext = p.extension(path).toLowerCase();
+    return ext == '.jpg' || ext == '.jpeg' || ext == '.png';
   }
 
   Future<Directory> _createTempOutputDir() async {
