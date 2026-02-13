@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/cloud_account.dart';
+import '../src/rust/api.dart' as rust;
 import 'r2_upload_service.dart';
 import 'google_drive_upload_service.dart';
 
@@ -78,8 +79,8 @@ class UploadOrchestrator {
   UploadOrchestrator({
     required R2UploadService r2Service,
     required GoogleDriveUploadService driveService,
-  })  : _r2Service = r2Service,
-        _driveService = driveService;
+  }) : _r2Service = r2Service,
+       _driveService = driveService;
 
   /// Cancel the current upload
   void cancel() {
@@ -117,41 +118,45 @@ class UploadOrchestrator {
 
     final tempDir = await _createTempOutputDir();
 
-    // TODO: Call Rust backend via flutter_rust_bridge
-    // For now, we'll use a placeholder that copies files as-is.
-    // Once codegen is run, replace with:
-    //   final results = await api.processImagesForUpload(
-    //     sourcePaths: imageFiles.map((f) => f.path).toList(),
-    //     outputDir: tempDir.path,
-    //     thumbWidth: config.thumbWidth,
-    //     previewWidth: config.previewWidth,
-    //     thumbQuality: config.thumbQuality,
-    //     previewQuality: config.previewQuality,
-    //   );
-    final processedFiles = <_ProcessedFile>[];
-    for (int i = 0; i < imageFiles.length; i++) {
-      if (_isCancelled) return;
+    final results = await rust.processImagesForUpload(
+      sourcePaths: imageFiles.map((f) => f.path).toList(),
+      outputDir: tempDir.path,
+      thumbWidth: config.thumbWidth,
+      previewWidth: config.previewWidth,
+      thumbQuality: config.thumbQuality,
+      previewQuality: config.previewQuality,
+    );
 
-      final file = imageFiles[i];
-      final stem = p.basenameWithoutExtension(file.path);
+    if (_isCancelled) return;
 
+    final failed = results.where((r) => !r.success).toList();
+    if (failed.isNotEmpty) {
+      final failedName = p.basename(failed.first.sourcePath);
       yield UploadProgress(
-        phase: UploadPhase.processing,
-        currentFile: i + 1,
-        totalFiles: totalFiles,
-        currentFileName: p.basename(file.path),
-        message: 'Processing ${i + 1}/$totalFiles...',
-        overallProgress: (i + 1) / totalFiles * 0.3,
+        phase: UploadPhase.error,
+        message: 'Processing failed: $failedName',
       );
-
-      // Placeholder — actual Rust processing will go here
-      processedFiles.add(_ProcessedFile(
-        sourcePath: file.path,
-        thumbPath: file.path, // placeholder
-        previewPath: file.path, // placeholder
-        name: stem,
-      ));
+      return;
     }
+
+    final processedFiles = results
+        .map(
+          (r) => _ProcessedFile(
+            sourcePath: r.sourcePath,
+            thumbPath: r.thumbPath,
+            previewPath: r.previewPath,
+            name: p.basenameWithoutExtension(r.sourcePath),
+          ),
+        )
+        .toList();
+
+    yield UploadProgress(
+      phase: UploadPhase.processing,
+      currentFile: totalFiles,
+      totalFiles: totalFiles,
+      message: 'Processing complete',
+      overallProgress: 0.3,
+    );
 
     // Phase 3: Upload to R2
     final eventSlug = _slugify(config.eventName);
@@ -189,11 +194,8 @@ class UploadOrchestrator {
 
     // Phase 4: Upload originals to Google Drive (if enabled)
     String? driveFolderId;
-    if (config.uploadOriginalToDrive &&
-        _driveService.isAuthenticated) {
-      driveFolderId = await _driveService.createFolder(
-        config.eventName,
-      );
+    if (config.uploadOriginalToDrive && _driveService.isAuthenticated) {
+      driveFolderId = await _driveService.createFolder(config.eventName);
       await _driveService.makeFolderPublic(driveFolderId);
 
       for (int i = 0; i < imageFiles.length; i++) {
@@ -227,12 +229,13 @@ class UploadOrchestrator {
       createdAt: DateTime.now(),
       totalPhotos: totalFiles,
       photos: processedFiles
-          .map((pf) => GalleryPhoto(
-                name: pf.name,
-                thumbKey: '$eventSlug/thumbs/${pf.name}.webp',
-                previewKey:
-                    '$eventSlug/previews/${pf.name}.webp',
-              ))
+          .map(
+            (pf) => GalleryPhoto(
+              name: pf.name,
+              thumbKey: '$eventSlug/thumbs/${pf.name}.webp',
+              previewKey: '$eventSlug/previews/${pf.name}.webp',
+            ),
+          )
           .toList(),
       driveFolderId: driveFolderId,
     );
@@ -266,15 +269,11 @@ class UploadOrchestrator {
     if (!dir.existsSync()) return [];
 
     final extensions = {'.jpg', '.jpeg', '.png'};
-    return dir
-        .listSync(recursive: false)
-        .whereType<File>()
-        .where((f) {
-      final ext = p.extension(f.path).toLowerCase();
-      return extensions.contains(ext);
-    }).toList()
-      ..sort((a, b) => p.basename(a.path)
-          .compareTo(p.basename(b.path)));
+    return dir.listSync(recursive: false).whereType<File>().where((f) {
+        final ext = p.extension(f.path).toLowerCase();
+        return extensions.contains(ext);
+      }).toList()
+      ..sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
   }
 
   Future<Directory> _createTempOutputDir() async {

@@ -71,9 +71,7 @@ pub fn copy_files_parallel(
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(max_threads)
         .build()
-        .unwrap_or_else(|_| {
-            rayon::ThreadPoolBuilder::new().build().unwrap()
-        });
+        .unwrap_or_else(|_| rayon::ThreadPoolBuilder::new().build().unwrap());
 
     let results: Vec<FileCopyResult> = pool.install(|| {
         files
@@ -105,24 +103,41 @@ pub fn copy_files_parallel(
                 let src = Path::new(&entry.source_path);
                 let dst = Path::new(&entry.dest_path);
 
-                let result = file_copy::copy_file(src, dst, skip_existing);
+                let mut file_result = match file_copy::copy_file(src, dst, skip_existing) {
+                    Ok(r) => r,
+                    Err(e) => FileCopyResult {
+                        source_path: entry.source_path.clone(),
+                        dest_path: entry.dest_path.clone(),
+                        bytes_copied: 0,
+                        duration_ms: 0,
+                        speed_mbps: 0.0,
+                        strategy_used: "Error".to_string(),
+                        success: false,
+                        error: Some(e.to_string()),
+                        skipped: false,
+                    },
+                };
 
-                match &result {
-                    Ok(r) => {
-                        if r.skipped {
-                            skipped.fetch_add(1, Ordering::Relaxed);
-                        } else if r.success {
-                            bytes_copied.fetch_add(
-                                r.bytes_copied,
-                                Ordering::Relaxed,
-                            );
-                        } else {
-                            failed.fetch_add(1, Ordering::Relaxed);
+                if verify_hash && file_result.success && !file_result.skipped {
+                    match hash::verify_files_match(src, dst, &HashAlgorithm::Md5) {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            file_result.success = false;
+                            file_result.error = Some("Hash mismatch".to_string());
+                        }
+                        Err(e) => {
+                            file_result.success = false;
+                            file_result.error = Some(format!("Verify failed: {}", e));
                         }
                     }
-                    Err(_) => {
-                        failed.fetch_add(1, Ordering::Relaxed);
-                    }
+                }
+
+                if file_result.skipped {
+                    skipped.fetch_add(1, Ordering::Relaxed);
+                } else if file_result.success {
+                    bytes_copied.fetch_add(file_result.bytes_copied, Ordering::Relaxed);
+                } else {
+                    failed.fetch_add(1, Ordering::Relaxed);
                 }
 
                 let idx = processed.fetch_add(1, Ordering::Relaxed) + 1;
@@ -154,30 +169,7 @@ pub fn copy_files_parallel(
                     });
                 }
 
-                // Post-copy verification
-                if verify_hash {
-                    if let Ok(ref r) = result {
-                        if r.success && !r.skipped {
-                            let _ = hash::verify_files_match(
-                                src,
-                                dst,
-                                &HashAlgorithm::Md5,
-                            );
-                        }
-                    }
-                }
-
-                result.unwrap_or_else(|e| FileCopyResult {
-                    source_path: entry.source_path.clone(),
-                    dest_path: entry.dest_path.clone(),
-                    bytes_copied: 0,
-                    duration_ms: 0,
-                    speed_mbps: 0.0,
-                    strategy_used: "Error".to_string(),
-                    success: false,
-                    error: Some(e.to_string()),
-                    skipped: false,
-                })
+                file_result
             })
             .collect()
     });
@@ -190,10 +182,7 @@ pub fn copy_files_parallel(
         0.0
     };
 
-    let peak = results
-        .iter()
-        .map(|r| r.speed_mbps)
-        .fold(0.0f64, f64::max);
+    let peak = results.iter().map(|r| r.speed_mbps).fold(0.0f64, f64::max);
 
     let success_count = results.iter().filter(|r| r.success && !r.skipped).count();
 

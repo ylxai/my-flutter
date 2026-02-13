@@ -59,16 +59,18 @@ class R2UploadService {
     }
 
     final stream = file.openRead();
+    final size = await file.length();
 
     await _client!.putObject(
       _account!.bucket,
       objectKey,
       Stream.castFrom(stream),
+      size: size,
+      metadata: _buildMetadata(contentType),
     );
 
     // Return public URL
-    final baseUrl = _account!.resolvedPublicUrl
-        .replaceAll(RegExp(r'/$'), '');
+    final baseUrl = _account!.resolvedPublicUrl.replaceAll(RegExp(r'/$'), '');
     return '$baseUrl/$objectKey';
   }
 
@@ -79,18 +81,18 @@ class R2UploadService {
   }) async {
     _ensureConfigured();
 
-    final jsonStr = const JsonEncoder.withIndent('  ')
-        .convert(manifest);
+    final jsonStr = const JsonEncoder.withIndent('  ').convert(manifest);
     final bytes = utf8.encode(jsonStr);
 
     await _client!.putObject(
       _account!.bucket,
       objectKey,
       Stream.value(bytes),
+      size: bytes.length,
+      metadata: _buildMetadata('application/json'),
     );
 
-    final baseUrl = _account!.resolvedPublicUrl
-        .replaceAll(RegExp(r'/$'), '');
+    final baseUrl = _account!.resolvedPublicUrl.replaceAll(RegExp(r'/$'), '');
     return '$baseUrl/$objectKey';
   }
 
@@ -99,10 +101,7 @@ class R2UploadService {
     _ensureConfigured();
 
     final objects = <String>[];
-    final stream = _client!.listObjects(
-      _account!.bucket,
-      prefix: prefix,
-    );
+    final stream = _client!.listObjects(_account!.bucket, prefix: prefix);
 
     await for (final chunk in stream) {
       for (final obj in chunk.objects) {
@@ -127,5 +126,12 @@ class R2UploadService {
   String _extractHost(String url) {
     final uri = Uri.parse(url);
     return uri.host;
+  }
+
+  Map<String, String>? _buildMetadata(String? contentType) {
+    if (contentType == null || contentType.isEmpty) {
+      return null;
+    }
+    return {'Content-Type': contentType};
   }
 }
