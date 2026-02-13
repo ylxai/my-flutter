@@ -1,0 +1,65 @@
+name: filecopy_utility
+description: "Hafiportrait Manager — professional file copy utility with high-performance I/O"
+publish_to: 'none'
+version: 2.0.0+1
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.41.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+  
+  # File Operations
+  file_picker: ^8.1.6
+  desktop_drop: ^0.5.0
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  
+  # UI
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.2
+  
+  # Storage
+  shared_preferences: ^2.3.4
+  
+  # Crypto/Hash
+  crypto: ^3.0.6
+  
+  # Utils
+  intl: ^0.19.0
+  uuid: ^4.5.1
+  collection: ^1.19.1
+  
+  # Rust FFI bridge
+  flutter_rust_bridge: 2.9.0
+  
+  # Cloud Upload (Hybrid Upload System)
+  minio: ^3.5.8
+  googleapis: ^16.0.0
+  googleapis_auth: ^1.6.0
+  url_launcher: ^6.3.0
+  
+  # Freezed for models
+  freezed_annotation: ^3.0.0
+  json_annotation: ^4.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.14
+  freezed: ^3.0.0
+  json_serializable: ^6.9.4
+  riverpod_generator: ^2.6.3
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
