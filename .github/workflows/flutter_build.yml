@@ -27,11 +27,14 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Install flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen@2.9.0
+
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Verify Rust Bridge
-        run: flutter pub run flutter_rust_bridge:codegen
+      - name: Generate Rust Bridge
+        run: flutter_rust_bridge_codegen generate
 
       - name: Build Linux
         run: flutter build linux --release
@@ -62,11 +65,14 @@ jobs:
       - name: Enable Desktop Support
         run: flutter config --enable-windows-desktop
 
+      - name: Install flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen@2.9.0
+
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Verify Rust Bridge
-        run: flutter pub run flutter_rust_bridge:codegen
+      - name: Generate Rust Bridge
+        run: flutter_rust_bridge_codegen generate
 
       - name: Build Windows
         run: flutter build windows --release
