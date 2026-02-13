@@ -75,6 +75,7 @@ class SettingsState {
 /// Settings state notifier with persistence
 class SettingsNotifier extends StateNotifier<SettingsState> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  bool _isDisposed = false;
 
   SettingsNotifier() : super(const SettingsState()) {
     _load();
@@ -82,10 +83,14 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_isDisposed) return;
     final themeName = prefs.getString('themeMode') ?? 'dark';
     final skip = prefs.getBool('skipExistingFiles') ?? true;
     final modeName = prefs.getString('copyMode') ?? 'ultraFast';
     final parallelism = prefs.getInt('maxParallelism') ?? 4;
+    final duplicateName = prefs.getString('duplicateHandling') ?? 'skip';
+    final rawExt = prefs.getStringList('rawExtensions');
+    final jpgExt = prefs.getStringList('jpgExtensions');
 
     state = state.copyWith(
       themeMode: themeName == 'light' ? ThemeMode.light : ThemeMode.dark,
@@ -94,7 +99,13 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
         (e) => e.name == modeName,
         orElse: () => CopyMode.ultraFast,
       ),
+      duplicateHandling: DuplicateHandling.values.firstWhere(
+        (e) => e.name == duplicateName,
+        orElse: () => DuplicateHandling.skip,
+      ),
       maxParallelism: parallelism,
+      rawExtensions: rawExt ?? state.rawExtensions,
+      jpgExtensions: jpgExt ?? state.jpgExtensions,
     );
 
     // Load R2 accounts
@@ -105,15 +116,26 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           .map((e) => R2Account.fromJson(e as Map<String, dynamic>))
           .toList();
       final hydrated = await _hydrateR2Accounts(accounts);
+      if (_isDisposed) return;
       state = state.copyWith(r2Accounts: hydrated);
       await _storeR2AccountsMetadata(prefs, hydrated);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Failed to parse R2 accounts: $e');
+      await prefs.remove('r2Accounts');
+      state = state.copyWith(r2Accounts: []);
+    }
 
     // Load GDrive credentials path
     final gdrivePath = prefs.getString('googleDriveCredentialsPath');
-    if (gdrivePath != null) {
+    if (gdrivePath != null && gdrivePath.isNotEmpty) {
       state = state.copyWith(googleDriveCredentialsPath: gdrivePath);
     }
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 
   Future<void> _save() async {
@@ -123,77 +145,82 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       state.themeMode == ThemeMode.light ? 'light' : 'dark',
     );
     await prefs.setBool('skipExistingFiles', state.skipExistingFiles);
+    await prefs.setString('duplicateHandling', state.duplicateHandling.name);
     await prefs.setString('copyMode', state.copyMode.name);
     await prefs.setInt('maxParallelism', state.maxParallelism);
+    await prefs.setStringList('rawExtensions', state.rawExtensions);
+    await prefs.setStringList('jpgExtensions', state.jpgExtensions);
     await _storeR2AccountsMetadata(prefs, state.r2Accounts);
     if (state.googleDriveCredentialsPath != null) {
       await prefs.setString(
         'googleDriveCredentialsPath',
         state.googleDriveCredentialsPath!,
       );
+    } else {
+      await prefs.remove('googleDriveCredentialsPath');
     }
   }
 
-  void setThemeMode(ThemeMode mode) {
+  Future<void> setThemeMode(ThemeMode mode) async {
     state = state.copyWith(themeMode: mode);
-    _save();
+    await _save();
   }
 
-  void toggleTheme() {
+  Future<void> toggleTheme() async {
     final newMode = state.themeMode == ThemeMode.dark
         ? ThemeMode.light
         : ThemeMode.dark;
-    setThemeMode(newMode);
+    await setThemeMode(newMode);
   }
 
-  void setSkipExisting(bool value) {
+  Future<void> setSkipExisting(bool value) async {
     state = state.copyWith(skipExistingFiles: value);
-    _save();
+    await _save();
   }
 
-  void setDuplicateHandling(DuplicateHandling handling) {
+  Future<void> setDuplicateHandling(DuplicateHandling handling) async {
     state = state.copyWith(duplicateHandling: handling);
-    _save();
+    await _save();
   }
 
-  void setCopyMode(CopyMode mode) {
+  Future<void> setCopyMode(CopyMode mode) async {
     state = state.copyWith(copyMode: mode);
-    _save();
+    await _save();
   }
 
-  void setMaxParallelism(int value) {
+  Future<void> setMaxParallelism(int value) async {
     state = state.copyWith(maxParallelism: value);
-    _save();
+    await _save();
   }
 
   // ── R2 Account Management ──
 
-  void addR2Account(R2Account account) {
+  Future<void> addR2Account(R2Account account) async {
     final accounts = [...state.r2Accounts, account];
     state = state.copyWith(r2Accounts: accounts);
-    _persistR2Secrets(account);
-    _save();
+    await _persistR2Secrets(account);
+    await _save();
   }
 
-  void updateR2Account(R2Account account) {
+  Future<void> updateR2Account(R2Account account) async {
     final accounts = state.r2Accounts
         .map((a) => a.id == account.id ? account : a)
         .toList();
     state = state.copyWith(r2Accounts: accounts);
-    _persistR2Secrets(account);
-    _save();
+    await _persistR2Secrets(account);
+    await _save();
   }
 
-  void removeR2Account(String accountId) {
+  Future<void> removeR2Account(String accountId) async {
     final accounts = state.r2Accounts.where((a) => a.id != accountId).toList();
     state = state.copyWith(r2Accounts: accounts);
-    _deleteR2Secrets(accountId);
-    _save();
+    await _deleteR2Secrets(accountId);
+    await _save();
   }
 
-  void setGoogleDriveCredentialsPath(String path) {
+  Future<void> setGoogleDriveCredentialsPath(String path) async {
     state = state.copyWith(googleDriveCredentialsPath: path);
-    _save();
+    await _save();
   }
 
   Future<List<R2Account>> _hydrateR2Accounts(List<R2Account> accounts) async {

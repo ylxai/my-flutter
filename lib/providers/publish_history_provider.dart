@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,32 +33,29 @@ class PublishRecord {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'eventName': eventName,
-        'publishedAt': publishedAt.toIso8601String(),
-        'photoCount': photoCount,
-        'successCount': successCount,
-        'failedCount': failedCount,
-        'durationMs': duration.inMilliseconds,
-        'galleryUrl': galleryUrl,
-        'driveFolderId': driveFolderId,
-        'isSuccess': isSuccess,
-      };
+    'id': id,
+    'eventName': eventName,
+    'publishedAt': publishedAt.toIso8601String(),
+    'photoCount': photoCount,
+    'successCount': successCount,
+    'failedCount': failedCount,
+    'durationMs': duration.inMilliseconds,
+    'galleryUrl': galleryUrl,
+    'driveFolderId': driveFolderId,
+    'isSuccess': isSuccess,
+  };
 
   factory PublishRecord.fromJson(Map<String, dynamic> json) {
     return PublishRecord(
       id: json['id'] as String? ?? '',
       eventName: json['eventName'] as String? ?? '',
-      publishedAt: DateTime.tryParse(
-            json['publishedAt'] as String? ?? '',
-          ) ??
+      publishedAt:
+          DateTime.tryParse(json['publishedAt'] as String? ?? '') ??
           DateTime.now(),
       photoCount: json['photoCount'] as int? ?? 0,
       successCount: json['successCount'] as int? ?? 0,
       failedCount: json['failedCount'] as int? ?? 0,
-      duration: Duration(
-        milliseconds: json['durationMs'] as int? ?? 0,
-      ),
+      duration: Duration(milliseconds: json['durationMs'] as int? ?? 0),
       galleryUrl: json['galleryUrl'] as String? ?? '',
       driveFolderId: json['driveFolderId'] as String?,
       isSuccess: json['isSuccess'] as bool? ?? false,
@@ -66,26 +64,34 @@ class PublishRecord {
 }
 
 /// Publish history state notifier
-class PublishHistoryNotifier
-    extends StateNotifier<List<PublishRecord>> {
+class PublishHistoryNotifier extends StateNotifier<List<PublishRecord>> {
+  bool _isDisposed = false;
+
   PublishHistoryNotifier() : super([]) {
     _load();
   }
 
   static const _key = 'publish_history';
+  static const _maxRecords = 200;
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key) ?? '[]';
     try {
       final list = jsonDecode(raw) as List;
-      state = list
-          .map((e) =>
-              PublishRecord.fromJson(e as Map<String, dynamic>))
-          .toList()
-        ..sort((a, b) =>
-            b.publishedAt.compareTo(a.publishedAt));
-    } catch (_) {}
+      final records =
+          list
+              .map((e) => PublishRecord.fromJson(e as Map<String, dynamic>))
+              .toList()
+            ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+      if (_isDisposed) return;
+      state = records.take(_maxRecords).toList();
+    } catch (e) {
+      debugPrint('Failed to parse publish history: $e');
+      await prefs.remove(_key);
+      if (_isDisposed) return;
+      state = [];
+    }
   }
 
   Future<void> _save() async {
@@ -97,7 +103,10 @@ class PublishHistoryNotifier
   }
 
   void addRecord(PublishRecord record) {
-    state = [record, ...state];
+    final updated = [record, ...state];
+    state = updated.length > _maxRecords
+        ? updated.take(_maxRecords).toList()
+        : updated;
     _save();
   }
 
@@ -110,9 +119,15 @@ class PublishHistoryNotifier
     state = [];
     _save();
   }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
 }
 
-final publishHistoryProvider = StateNotifierProvider<
-    PublishHistoryNotifier, List<PublishRecord>>((ref) {
-  return PublishHistoryNotifier();
-});
+final publishHistoryProvider =
+    StateNotifierProvider<PublishHistoryNotifier, List<PublishRecord>>((ref) {
+      return PublishHistoryNotifier();
+    });

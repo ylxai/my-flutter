@@ -68,6 +68,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
   final GoogleDriveUploadService _driveService;
   final PublishHistoryNotifier _historyNotifier;
   UploadOrchestrator? _orchestrator;
+  static const _maxLogs = 300;
 
   UploadNotifier({
     required R2UploadService r2Service,
@@ -84,7 +85,12 @@ class UploadNotifier extends StateNotifier<UploadState> {
       message: message,
       level: level,
     );
-    state = state.copyWith(logs: [...state.logs, entry]);
+    final updated = [...state.logs, entry];
+    state = state.copyWith(
+      logs: updated.length > _maxLogs
+          ? updated.sublist(updated.length - _maxLogs)
+          : updated,
+    );
   }
 
   /// Start the upload pipeline

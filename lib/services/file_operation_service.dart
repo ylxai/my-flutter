@@ -222,25 +222,22 @@ class FileOperationService {
               '${destDir.path}${Platform.pathSeparator}${file.name}';
 
           try {
-            if (skipExisting) {
-              final destFile = File(destPath);
-              if (destFile.existsSync() && destFile.lengthSync() == file.size) {
-                skippedCount++;
-                processedFiles++;
-                controller.add(
-                  _makeProgress(
-                    files.length,
-                    processedFiles,
-                    file.name,
-                    bytesCopied,
-                    totalBytes,
-                    startTime,
-                    skippedCount,
-                    failedCount,
-                  ),
-                );
-                continue;
-              }
+            if (skipExisting && _shouldSkipExisting(file, destPath)) {
+              skippedCount++;
+              processedFiles++;
+              controller.add(
+                _makeProgress(
+                  files.length,
+                  processedFiles,
+                  file.name,
+                  bytesCopied,
+                  totalBytes,
+                  startTime,
+                  skippedCount,
+                  failedCount,
+                ),
+              );
+              continue;
             }
 
             await File(file.path).copy(destPath);
@@ -346,17 +343,12 @@ class FileOperationService {
       final destPath = '${destDir.path}${Platform.pathSeparator}${file.name}';
 
       try {
-        // Smart copy: skip if same size
-        if (skipExisting) {
-          final destFile = File(destPath);
-          if (destFile.existsSync() && destFile.lengthSync() == file.size) {
-            skippedCount++;
-            processedFiles++;
-            continue;
-          }
+        if (skipExisting && _shouldSkipExisting(file, destPath)) {
+          skippedCount++;
+          processedFiles++;
+          continue;
         }
 
-        // Copy file
         await File(file.path).copy(destPath);
         bytesCopied += file.size;
       } catch (e) {
@@ -471,5 +463,17 @@ class FileOperationService {
   static String _fileExtension(String path) {
     final dot = path.lastIndexOf('.');
     return dot >= 0 ? path.substring(dot + 1) : '';
+  }
+
+  bool _shouldSkipExisting(FileItem file, String destPath) {
+    final destFile = File(destPath);
+    if (!destFile.existsSync()) return false;
+
+    final destStat = destFile.statSync();
+    if (destStat.size != file.size) return false;
+
+    final sourceModified =
+        file.modifiedDate ?? File(file.path).statSync().modified;
+    return !destStat.modified.isBefore(sourceModified);
   }
 }

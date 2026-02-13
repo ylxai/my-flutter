@@ -36,8 +36,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   @override
   Widget build(BuildContext context) {
-    final uploadState = ref.watch(uploadProvider);
-    final settings = ref.watch(settingsProvider);
+    final status = ref.watch(uploadProvider.select((s) => s.status));
     final theme = Theme.of(context);
 
     return Padding(
@@ -62,28 +61,56 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           const SizedBox(height: 24),
 
           // Content based on upload status
-          Expanded(child: _buildContent(uploadState, settings, theme)),
+          Expanded(child: _buildContent(status, theme)),
         ],
       ),
     );
   }
 
-  Widget _buildContent(
-    UploadState uploadState,
-    SettingsState settings,
-    ThemeData theme,
-  ) {
-    switch (uploadState.status) {
+  Widget _buildContent(UploadStatus status, ThemeData theme) {
+    switch (status) {
       case UploadStatus.idle:
       case UploadStatus.cancelled:
-        return _buildSetupForm(settings, theme);
+        return Consumer(
+          builder: (context, ref, _) {
+            final settings = ref.watch(settingsProvider);
+            return _buildSetupForm(settings, theme);
+          },
+        );
       case UploadStatus.processing:
       case UploadStatus.uploading:
-        return _buildProgressView(uploadState, theme);
+        return Consumer(
+          builder: (context, ref, _) {
+            final progress = ref.watch(
+              uploadProvider.select((s) => s.progress),
+            );
+            final logs = ref.watch(uploadProvider.select((s) => s.logs));
+            return _buildProgressView(progress, logs, theme);
+          },
+        );
       case UploadStatus.completed:
-        return _buildResultView(uploadState, theme);
+        return Consumer(
+          builder: (context, ref, _) {
+            final progress = ref.watch(
+              uploadProvider.select((s) => s.progress),
+            );
+            final logs = ref.watch(uploadProvider.select((s) => s.logs));
+            return _buildResultView(progress, logs, theme);
+          },
+        );
       case UploadStatus.error:
-        return _buildErrorView(uploadState, theme);
+        return Consumer(
+          builder: (context, ref, _) {
+            final progress = ref.watch(
+              uploadProvider.select((s) => s.progress),
+            );
+            final logs = ref.watch(uploadProvider.select((s) => s.logs));
+            final errorMessage = ref.watch(
+              uploadProvider.select((s) => s.errorMessage),
+            );
+            return _buildErrorView(errorMessage, progress, logs, theme);
+          },
+        );
     }
   }
 
@@ -281,8 +308,11 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   // ── Progress View ──
 
-  Widget _buildProgressView(UploadState uploadState, ThemeData theme) {
-    final progress = uploadState.progress;
+  Widget _buildProgressView(
+    UploadProgress? progress,
+    List<LogEntry> logs,
+    ThemeData theme,
+  ) {
     if (progress == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -331,15 +361,18 @@ class _PublishPageState extends ConsumerState<PublishPage> {
         ),
         const SizedBox(height: 16),
         // Log panel
-        Expanded(child: _buildLogPanel(uploadState, theme)),
+        Expanded(child: _buildLogPanel(logs, theme)),
       ],
     );
   }
 
   // ── Result View ──
 
-  Widget _buildResultView(UploadState uploadState, ThemeData theme) {
-    final p = uploadState.progress;
+  Widget _buildResultView(
+    UploadProgress? progress,
+    List<LogEntry> logs,
+    ThemeData theme,
+  ) {
     return Column(
       children: [
         const SizedBox(height: 24),
@@ -352,10 +385,10 @@ class _PublishPageState extends ConsumerState<PublishPage> {
             color: Colors.green.shade400,
           ),
         ),
-        if (p != null) ...[
+        if (progress != null) ...[
           const SizedBox(height: 12),
           Text(
-            '${p.totalFiles} photos uploaded',
+            '${progress.totalFiles} photos uploaded',
             style: theme.textTheme.bodyMedium,
           ),
         ],
@@ -369,14 +402,19 @@ class _PublishPageState extends ConsumerState<PublishPage> {
         ),
         const SizedBox(height: 16),
         // Show log from this session
-        Expanded(child: _buildLogPanel(uploadState, theme)),
+        Expanded(child: _buildLogPanel(logs, theme)),
       ],
     );
   }
 
   // ── Error View ──
 
-  Widget _buildErrorView(UploadState uploadState, ThemeData theme) {
+  Widget _buildErrorView(
+    String? errorMessage,
+    UploadProgress? progress,
+    List<LogEntry> logs,
+    ThemeData theme,
+  ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -392,7 +430,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            uploadState.errorMessage ?? 'Unknown error',
+            errorMessage ?? 'Unknown error',
             style: theme.textTheme.bodyMedium,
             textAlign: TextAlign.center,
           ),
@@ -404,6 +442,10 @@ class _PublishPageState extends ConsumerState<PublishPage> {
             icon: const Icon(Icons.refresh, size: 18),
             label: const Text('Try Again'),
           ),
+          if (progress != null) ...[
+            const SizedBox(height: 16),
+            SizedBox(height: 220, child: _buildLogPanel(logs, theme)),
+          ],
         ],
       ),
     );
@@ -455,8 +497,7 @@ class _PublishPageState extends ConsumerState<PublishPage> {
 
   // ── Log Panel ──
 
-  Widget _buildLogPanel(UploadState uploadState, ThemeData theme) {
-    final logs = uploadState.logs;
+  Widget _buildLogPanel(List<LogEntry> logs, ThemeData theme) {
     if (logs.isEmpty) {
       return const SizedBox.shrink();
     }

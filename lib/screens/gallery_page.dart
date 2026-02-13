@@ -8,8 +8,7 @@ import '../providers/copy_provider.dart';
 import '../models/file_item.dart';
 
 /// Gallery page state
-final _galleryFilesProvider =
-    StateProvider<List<FileItem>>((ref) => []);
+final _galleryFilesProvider = StateProvider<List<FileItem>>((ref) => []);
 
 final _galleryLoadingProvider = StateProvider<bool>((ref) => false);
 
@@ -28,6 +27,14 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     // Auto-scan if source folder is set
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoScan();
+    });
+    ref.listen<String>(copyProvider.select((s) => s.sourceFolder), (
+      previous,
+      next,
+    ) {
+      if (next.isNotEmpty && next != previous) {
+        _scanFolder(next);
+      }
     });
   }
 
@@ -59,7 +66,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   Widget build(BuildContext context) {
     final files = ref.watch(_galleryFilesProvider);
     final isLoading = ref.watch(_galleryLoadingProvider);
-    final sourceFolder = ref.watch(copyProvider).sourceFolder;
+    final sourceFolder = ref.watch(copyProvider.select((s) => s.sourceFolder));
 
     return Column(
       children: [
@@ -71,8 +78,8 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           child: isLoading
               ? _buildLoading()
               : files.isEmpty
-                  ? _buildEmpty(sourceFolder)
-                  : _buildGrid(files),
+              ? _buildEmpty(sourceFolder)
+              : _buildGrid(files),
         ),
       ],
     );
@@ -96,16 +103,14 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
           const SizedBox(width: 10),
           Text(
             'Gallery',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(width: 12),
           if (fileCount > 0)
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10, vertical: 3,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
                 color: GlassColors.liquidPurple.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
@@ -139,9 +144,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircularProgressIndicator(
-            color: GlassColors.liquidPurple,
-          ),
+          CircularProgressIndicator(color: GlassColors.liquidPurple),
           SizedBox(height: 16),
           Text(
             'Scanning folder...',
@@ -167,19 +170,13 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
             sourceFolder.isEmpty
                 ? 'Set a source folder first'
                 : 'No image files found',
-            style: const TextStyle(
-              color: GlassColors.systemGray,
-              fontSize: 14,
-            ),
+            style: const TextStyle(color: GlassColors.systemGray, fontSize: 14),
           ),
           if (sourceFolder.isEmpty) ...[
             const SizedBox(height: 8),
             const Text(
               'Go to Copy page and browse for a folder',
-              style: TextStyle(
-                color: GlassColors.systemGray,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: GlassColors.systemGray, fontSize: 12),
             ),
           ],
         ],
@@ -215,9 +212,7 @@ class _GalleryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isRaw = file.isRaw;
-    final typeColor = isRaw
-        ? GlassColors.liquidTeal
-        : GlassColors.liquidBlue;
+    final typeColor = isRaw ? GlassColors.liquidTeal : GlassColors.liquidBlue;
 
     return GlassCard(
       child: Column(
@@ -256,7 +251,8 @@ class _GalleryTile extends StatelessWidget {
                     right: 6,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2,
+                        horizontal: 6,
+                        vertical: 2,
                       ),
                       decoration: BoxDecoration(
                         color: typeColor.withValues(alpha: 0.2),
@@ -280,10 +276,7 @@ class _GalleryTile extends StatelessWidget {
           // File name
           Text(
             file.name,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -291,10 +284,7 @@ class _GalleryTile extends StatelessWidget {
           // File info
           Text(
             FileItem.formatFileSize(file.size),
-            style: const TextStyle(
-              color: GlassColors.systemGray,
-              fontSize: 10,
-            ),
+            style: const TextStyle(color: GlassColors.systemGray, fontSize: 10),
           ),
         ],
       ),
@@ -302,14 +292,10 @@ class _GalleryTile extends StatelessWidget {
   }
 
   Widget _buildThumbnail() {
-    final imageFile = File(file.path);
-    if (!imageFile.existsSync()) {
-      return const SizedBox.shrink();
-    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: Image.file(
-        imageFile,
+        File(file.path),
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,

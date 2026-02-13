@@ -10,12 +10,12 @@ class FileCopyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
+    final themeMode = ref.watch(settingsProvider.select((s) => s.themeMode));
 
     return MaterialApp(
       title: 'Hafiportrait Manager',
       debugShowCheckedModeBanner: false,
-      themeMode: settings.themeMode,
+      themeMode: themeMode,
       theme: GlassTheme.lightTheme,
       darkTheme: GlassTheme.darkTheme,
       home: const MainScreen(),

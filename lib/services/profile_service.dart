@@ -7,11 +7,11 @@ import '../models/copy_profile.dart';
 class ProfileService {
   final String _profilesFolder;
 
-  ProfileService()
-      : _profilesFolder = _getProfilesFolder();
+  ProfileService() : _profilesFolder = _getProfilesFolder();
 
   static String _getProfilesFolder() {
-    final home = Platform.environment['HOME'] ??
+    final home =
+        Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
         '.';
     final folder = '$home/.filecopy_utility/profiles';
@@ -70,6 +70,11 @@ class ProfileService {
   Future<void> _writeProfiles(List<CopyProfile> profiles) async {
     final file = File(_profilesFile);
     final json = jsonEncode(profiles.map((p) => p.toJson()).toList());
-    await file.writeAsString(json);
+    final tempFile = File('$_profilesFile.tmp');
+    await tempFile.writeAsString(json);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    await tempFile.rename(_profilesFile);
   }
 }

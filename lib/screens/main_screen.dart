@@ -223,15 +223,17 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Widget _buildCopyPage() {
-    final copyState = ref.watch(copyProvider);
-    final stats = ref.watch(dashboardStatsProvider);
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
       child: Column(
         children: [
           // Stats row
-          _buildStatsRow(stats),
+          Consumer(
+            builder: (context, ref, _) {
+              final stats = ref.watch(dashboardStatsProvider);
+              return _buildStatsRow(stats);
+            },
+          ),
           const SizedBox(height: 16),
           // Main panels
           Expanded(
@@ -239,16 +241,38 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Left: Source + File List
-                Expanded(flex: 5, child: _buildLeftPanel(copyState)),
+                Expanded(
+                  flex: 5,
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final copyState = ref.watch(copyProvider);
+                      return _buildLeftPanel(copyState);
+                    },
+                  ),
+                ),
                 const SizedBox(width: 16),
                 // Right: Progress + Controls + Log
-                Expanded(flex: 3, child: _buildRightPanel(copyState, stats)),
+                Expanded(
+                  flex: 3,
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final copyState = ref.watch(copyProvider);
+                      final stats = ref.watch(dashboardStatsProvider);
+                      return _buildRightPanel(copyState, stats);
+                    },
+                  ),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 12),
           // Status bar
-          _buildStatusBar(copyState),
+          Consumer(
+            builder: (context, ref, _) {
+              final copyState = ref.watch(copyProvider);
+              return _buildStatusBar(copyState);
+            },
+          ),
           const SizedBox(height: 12),
         ],
       ),
