@@ -77,8 +77,11 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _isDisposed = false;
 
-  SettingsNotifier() : super(const SettingsState()) {
-    _load();
+  SettingsNotifier({SettingsState? initialState, bool loadFromPrefs = true})
+    : super(initialState ?? const SettingsState()) {
+    if (loadFromPrefs) {
+      _load();
+    }
   }
 
   Future<void> _load() async {

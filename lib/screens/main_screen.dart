@@ -9,6 +9,7 @@ import '../theme/glass_colors.dart';
 import '../widgets/glass_widgets.dart';
 import '../providers/copy_provider.dart';
 import '../models/file_item.dart';
+import '../services/file_picker_adapter.dart';
 import 'gallery_page.dart';
 import 'publish_page.dart';
 import 'settings_page.dart';
@@ -925,7 +926,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   // ═══════════════════════════════════════
 
   Future<void> _selectSourceFolder() async {
-    final result = await FilePicker.platform.getDirectoryPath(
+    final picker = ref.read(filePickerProvider);
+    final result = await picker.getDirectoryPath(
       dialogTitle: 'Select Source Folder',
     );
     if (result != null) {
@@ -935,7 +937,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Future<void> _importFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final picker = ref.read(filePickerProvider);
+    final result = await picker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['txt', 'csv'],
     );

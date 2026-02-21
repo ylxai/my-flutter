@@ -67,6 +67,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
   final R2UploadService _r2Service;
   final GoogleDriveUploadService _driveService;
   final PublishHistoryNotifier _historyNotifier;
+  final UploadOrchestratorFactory _orchestratorFactory;
   UploadOrchestrator? _orchestrator;
   static const _maxLogs = 300;
 
@@ -74,9 +75,11 @@ class UploadNotifier extends StateNotifier<UploadState> {
     required R2UploadService r2Service,
     required GoogleDriveUploadService driveService,
     required PublishHistoryNotifier historyNotifier,
+    required UploadOrchestratorFactory orchestratorFactory,
   }) : _r2Service = r2Service,
        _driveService = driveService,
        _historyNotifier = historyNotifier,
+       _orchestratorFactory = orchestratorFactory,
        super(const UploadState());
 
   void _addLog(String message, {LogLevel level = LogLevel.info}) {
@@ -152,7 +155,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
     }
 
     // Create orchestrator
-    _orchestrator = UploadOrchestrator(
+    _orchestrator = _orchestratorFactory(
       r2Service: _r2Service,
       driveService: _driveService,
     );
@@ -263,6 +266,17 @@ final driveServiceProvider = Provider<GoogleDriveUploadService>((ref) {
   return GoogleDriveUploadService();
 });
 
+final uploadOrchestratorFactoryProvider = Provider<UploadOrchestratorFactory>((
+  ref,
+) {
+  return ({
+    required R2UploadService r2Service,
+    required GoogleDriveUploadService driveService,
+  }) {
+    return UploadOrchestrator(r2Service: r2Service, driveService: driveService);
+  };
+});
+
 final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((
   ref,
 ) {
@@ -270,5 +284,11 @@ final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((
     r2Service: ref.watch(r2ServiceProvider),
     driveService: ref.watch(driveServiceProvider),
     historyNotifier: ref.watch(publishHistoryProvider.notifier),
+    orchestratorFactory: ref.watch(uploadOrchestratorFactoryProvider),
   );
 });
+typedef UploadOrchestratorFactory =
+    UploadOrchestrator Function({
+      required R2UploadService r2Service,
+      required GoogleDriveUploadService driveService,
+    });

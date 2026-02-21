@@ -4,7 +4,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/cloud_account.dart';
@@ -13,6 +12,7 @@ import '../providers/upload_provider.dart';
 import '../providers/publish_history_provider.dart';
 import '../services/upload_orchestrator.dart';
 import '../theme/glass_colors.dart';
+import '../services/file_picker_adapter.dart';
 
 class PublishPage extends ConsumerStatefulWidget {
   const PublishPage({super.key});
@@ -463,7 +463,8 @@ class _PublishPageState extends ConsumerState<PublishPage> {
   // ── Actions ──
 
   Future<void> _pickFolder() async {
-    final result = await FilePicker.platform.getDirectoryPath(
+    final picker = ref.read(filePickerProvider);
+    final result = await picker.getDirectoryPath(
       dialogTitle: 'Select Photo Folder',
     );
     if (result != null) {
