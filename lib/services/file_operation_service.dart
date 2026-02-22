@@ -427,8 +427,24 @@ class FileOperationService {
 
       try {
         if (skipExisting && _shouldSkipExisting(file, destPath)) {
+          // ✅ FIX reviewer: Emit progress saat file di-skip agar
+          // copy_provider.dart bisa tracking skippedFiles dengan benar
+          // di sequential mode (parallelism=1). Tanpa ini, currentFilePath
+          // tidak pernah di-set untuk skipped file sehingga CopyResult.skippedFiles
+          // selalu kosong di mode single-thread.
           skippedCount++;
           processedFiles++;
+          yield _makeProgress(
+            files.length,
+            processedFiles,
+            file.name,
+            bytesCopied,
+            totalBytes,
+            startTime,
+            skippedCount,
+            failedCount,
+            currentFilePath: file.path,
+          );
           continue;
         }
 

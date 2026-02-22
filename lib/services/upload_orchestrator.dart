@@ -15,6 +15,7 @@ import 'dart:math';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../constants/file_constants.dart';
 import '../models/cloud_account.dart';
 import '../src/rust/api.dart' as rust;
 import 'r2_upload_service.dart';
@@ -395,6 +396,11 @@ class UploadOrchestrator {
 
   // ── Private helpers ──
 
+  /// Scan folder untuk file gambar dengan batas keamanan dari [ScanLimits].
+  ///
+  /// ✅ FIX reviewer: Ganti `listSync(recursive: true)` tak terbatas dengan
+  /// rekursif manual berbatas depth dan file count — konsisten dengan fix P0-4
+  /// yang diterapkan di `file_operation_service.dart`.
   Future<List<File>> _scanForImages(
     String folderPath, {
     required bool recursive,
@@ -407,20 +413,39 @@ class UploadOrchestrator {
       final normalized = extensions
           .map((e) => e.toLowerCase().replaceFirst('.', ''))
           .toSet();
-      final paths =
-          dir
-              .listSync(recursive: recursive, followLinks: false)
-              .whereType<File>()
-              .where((f) {
-                final ext = p
-                    .extension(f.path)
-                    .toLowerCase()
-                    .replaceFirst('.', '');
-                return normalized.contains(ext);
-              })
-              .map((f) => f.path)
-              .toList()
-            ..sort((a, b) => p.basename(a).compareTo(p.basename(b)));
+
+      final paths = <String>[];
+      final maxDepth = recursive ? ScanLimits.maxDepth : 0;
+
+      void scanDir(Directory current, int depth) {
+        if (depth > maxDepth) return;
+        if (paths.length >= ScanLimits.maxFiles) return;
+
+        List<FileSystemEntity> entries;
+        try {
+          entries = current.listSync(followLinks: false);
+        } catch (_) {
+          return; // skip folder tanpa akses
+        }
+
+        for (final entry in entries) {
+          if (paths.length >= ScanLimits.maxFiles) return;
+          if (entry is File) {
+            final ext = p
+                .extension(entry.path)
+                .toLowerCase()
+                .replaceFirst('.', '');
+            if (normalized.contains(ext)) {
+              paths.add(entry.path);
+            }
+          } else if (entry is Directory && depth < maxDepth) {
+            scanDir(entry, depth + 1);
+          }
+        }
+      }
+
+      scanDir(dir, 0);
+      paths.sort((a, b) => p.basename(a).compareTo(p.basename(b)));
       return paths;
     }).then((paths) => paths.map((path) => File(path)).toList());
   }

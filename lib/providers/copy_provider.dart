@@ -160,16 +160,25 @@ class CopyNotifier extends Notifier<CopyState> {
         // Track file yang diproses untuk kategorisasi hasil akhir.
         // Gunakan currentFilePath (path lengkap) bukan currentFileName
         // agar tidak collision ketika ada file dengan nama sama di folder beda.
+        //
+        // ✅ FIX reviewer: Gunakan snapshot counter sebelum add agar tidak
+        // misclassify ketika 1 progress event increment skippedCount DAN
+        // failedCount sekaligus (tidak mungkin secara desain, tapi defensive).
+        // Prioritas: failed > skipped (jika keduanya naik, classified sebagai failed).
         final currentPath = progress.currentFilePath;
-        if (currentPath.isNotEmpty && fileByPath.containsKey(currentPath)) {
-          // Deteksi file yang di-skip: skippedCount naik tapi path belum tercatat
-          if (progress.skippedCount > skippedPaths.length) {
-            skippedPaths.add(currentPath);
-          }
+        if (currentPath.isNotEmpty &&
+            fileByPath.containsKey(currentPath) &&
+            !skippedPaths.contains(currentPath) &&
+            !failedPaths.contains(currentPath)) {
+          final newFailedCount = progress.failedCount;
+          final newSkippedCount = progress.skippedCount;
 
-          // Deteksi file yang gagal: failedCount naik tapi path belum tercatat
-          if (progress.failedCount > failedPaths.length) {
+          if (newFailedCount > failedPaths.length) {
+            // File ini gagal — prioritas tertinggi
             failedPaths.add(currentPath);
+          } else if (newSkippedCount > skippedPaths.length) {
+            // File ini di-skip (hanya jika tidak gagal)
+            skippedPaths.add(currentPath);
           }
         }
 
