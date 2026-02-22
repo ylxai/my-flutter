@@ -33,20 +33,20 @@ class CopyProfile {
   }) : createdDate = createdDate ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'description': description,
-        'sourceListPath': sourceListPath,
-        'destinationFolder': destinationFolder,
-        'threadCount': threadCount,
-        'verifyIntegrity': verifyIntegrity,
-        'hashAlgorithm': hashAlgorithm.name,
-        'autoRetry': autoRetry,
-        'maxRetries': maxRetries,
-        'overwriteExisting': overwriteExisting,
-        'duplicateHandling': duplicateHandling.name,
-        'createdDate': createdDate.toIso8601String(),
-        'lastUsed': lastUsed?.toIso8601String(),
-      };
+    'name': name,
+    'description': description,
+    'sourceListPath': sourceListPath,
+    'destinationFolder': destinationFolder,
+    'threadCount': threadCount,
+    'verifyIntegrity': verifyIntegrity,
+    'hashAlgorithm': hashAlgorithm.name,
+    'autoRetry': autoRetry,
+    'maxRetries': maxRetries,
+    'overwriteExisting': overwriteExisting,
+    'duplicateHandling': duplicateHandling.name,
+    'createdDate': createdDate.toIso8601String(),
+    'lastUsed': lastUsed?.toIso8601String(),
+  };
 
   factory CopyProfile.fromJson(Map<String, dynamic> json) {
     return CopyProfile(

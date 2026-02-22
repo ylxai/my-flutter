@@ -51,22 +51,19 @@ class PerformanceSettings {
       buffer = 512 * 1024; // 512KB
     }
 
-    return PerformanceSettings(
-      maxParallelism: parallelism,
-      bufferSize: buffer,
-    );
+    return PerformanceSettings(maxParallelism: parallelism, bufferSize: buffer);
   }
 
   Map<String, dynamic> toJson() => {
-        'mode': mode.name,
-        'optimization': optimization.name,
-        'maxParallelism': maxParallelism,
-        'bufferSize': bufferSize,
-        'useMemoryMapping': useMemoryMapping,
-        'useDirectIO': useDirectIO,
-        'preAllocateFiles': preAllocateFiles,
-        'flushToDisk': flushToDisk,
-      };
+    'mode': mode.name,
+    'optimization': optimization.name,
+    'maxParallelism': maxParallelism,
+    'bufferSize': bufferSize,
+    'useMemoryMapping': useMemoryMapping,
+    'useDirectIO': useDirectIO,
+    'preAllocateFiles': preAllocateFiles,
+    'flushToDisk': flushToDisk,
+  };
 
   factory PerformanceSettings.fromJson(Map<String, dynamic> json) {
     return PerformanceSettings(

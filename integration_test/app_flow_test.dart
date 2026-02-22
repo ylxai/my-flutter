@@ -96,15 +96,10 @@ void main() {
     await tester.tap(find.text('Import'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(
-      find.byType(TextField).first,
-      'photo1\nphoto2',
-    );
+    await tester.enterText(find.byType(TextField).first, 'photo1\nphoto2');
     await tester.pumpAndSettle();
 
-    await Clipboard.setData(
-      const ClipboardData(text: 'photo1\nphoto2'),
-    );
+    await Clipboard.setData(const ClipboardData(text: 'photo1\nphoto2'));
     await tester.tap(find.text('Paste'));
     await tester.pumpAndSettle();
 
@@ -131,10 +126,7 @@ void main() {
       timeout: const Duration(seconds: 20),
     );
     final finalStatus = container.read(copyProvider).status;
-    expect(
-      [CopyStatus.completed, CopyStatus.idle].contains(finalStatus),
-      true,
-    );
+    expect([CopyStatus.completed, CopyStatus.idle].contains(finalStatus), true);
 
     await tester.tap(find.text('Pause'));
     await tester.pumpAndSettle();

@@ -22,13 +22,25 @@ class FileItem {
   }
 
   bool get isRaw => const [
-        'cr2', 'cr3', 'nef', 'arw', 'raf', 'orf',
-        'rw2', 'dng', 'raw', 'pef', 'srw',
-      ].contains(extension);
+    'cr2',
+    'cr3',
+    'nef',
+    'arw',
+    'raf',
+    'orf',
+    'rw2',
+    'dng',
+    'raw',
+    'pef',
+    'srw',
+  ].contains(extension);
 
   bool get isJpg => const ['jpg', 'jpeg'].contains(extension);
 
-  bool get isImage => isRaw || isJpg || const ['png', 'tiff', 'bmp', 'webp'].contains(extension);
+  bool get isImage =>
+      isRaw ||
+      isJpg ||
+      const ['png', 'tiff', 'bmp', 'webp'].contains(extension);
 
   String get formattedSize => formatFileSize(size);
 

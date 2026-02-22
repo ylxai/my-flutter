@@ -4,13 +4,21 @@ import 'package:filecopy_utility/models/file_item.dart';
 void main() {
   group('FileItem', () {
     test('should detect RAW extensions', () {
-      final file = FileItem(path: '/test/photo.cr2', name: 'photo.cr2', size: 1024);
+      final file = FileItem(
+        path: '/test/photo.cr2',
+        name: 'photo.cr2',
+        size: 1024,
+      );
       expect(file.isRaw, isTrue);
       expect(file.isJpg, isFalse);
     });
 
     test('should detect JPG extensions', () {
-      final file = FileItem(path: '/test/photo.jpg', name: 'photo.jpg', size: 1024);
+      final file = FileItem(
+        path: '/test/photo.jpg',
+        name: 'photo.jpg',
+        size: 1024,
+      );
       expect(file.isJpg, isTrue);
       expect(file.isRaw, isFalse);
     });
@@ -23,7 +31,11 @@ void main() {
     });
 
     test('should extract extension', () {
-      final file = FileItem(path: '/test/photo.CR2', name: 'photo.CR2', size: 1024);
+      final file = FileItem(
+        path: '/test/photo.CR2',
+        name: 'photo.CR2',
+        size: 1024,
+      );
       expect(file.extension, 'cr2');
     });
   });

@@ -56,10 +56,7 @@ class GlassTheme {
             color: GlassColors.textDarkSecondary,
             fontSize: 13,
           ),
-          bodySmall: TextStyle(
-            color: GlassColors.textDarkMuted,
-            fontSize: 12,
-          ),
+          bodySmall: TextStyle(color: GlassColors.textDarkMuted, fontSize: 12),
           labelLarge: TextStyle(
             color: GlassColors.textDarkPrimary,
             fontSize: 13,
@@ -72,10 +69,7 @@ class GlassTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: GlassColors.liquidBlue,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: 12,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -85,13 +79,8 @@ class GlassTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: GlassColors.textDarkPrimary,
-          side: BorderSide(
-            color: Colors.white.withValues(alpha: 0.15),
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 10,
-          ),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
@@ -106,16 +95,11 @@ class GlassTheme {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: Colors.white.withValues(alpha: 0.08),
-          ),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: GlassColors.liquidBlue,
-            width: 2,
-          ),
+          borderSide: const BorderSide(color: GlassColors.liquidBlue, width: 2),
         ),
         hintStyle: const TextStyle(color: GlassColors.systemGray),
         contentPadding: const EdgeInsets.symmetric(
@@ -150,16 +134,11 @@ class GlassTheme {
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(
-            color: Colors.black.withValues(alpha: 0.08),
-          ),
+          borderSide: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(
-            color: GlassColors.liquidBlue,
-            width: 2,
-          ),
+          borderSide: const BorderSide(color: GlassColors.liquidBlue, width: 2),
         ),
         hintStyle: const TextStyle(color: GlassColors.systemGray),
         contentPadding: const EdgeInsets.symmetric(

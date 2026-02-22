@@ -28,15 +28,11 @@ class SettingsPage extends ConsumerWidget {
         const SizedBox(height: 12),
         _buildCopyBehaviorCard(context, ref, settings),
         const SizedBox(height: 24),
-        _sectionHeader(
-          context, 'Performance', Icons.speed_rounded,
-        ),
+        _sectionHeader(context, 'Performance', Icons.speed_rounded),
         const SizedBox(height: 12),
         _buildPerformanceCard(context, ref, settings),
         const SizedBox(height: 24),
-        _sectionHeader(
-          context, 'Cloud Accounts', Icons.cloud_rounded,
-        ),
+        _sectionHeader(context, 'Cloud Accounts', Icons.cloud_rounded),
         const SizedBox(height: 12),
         _buildCloudAccountsCard(context, ref, settings),
         const SizedBox(height: 24),
@@ -47,25 +43,25 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  Widget _sectionHeader(
-    BuildContext context, String title, IconData icon,
-  ) {
+  Widget _sectionHeader(BuildContext context, String title, IconData icon) {
     return Row(
       children: [
         Icon(icon, size: 18, color: GlassColors.liquidBlue),
         const SizedBox(width: 8),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
         ),
       ],
     );
   }
 
   Widget _buildThemeCard(
-    BuildContext context, WidgetRef ref, SettingsState settings,
+    BuildContext context,
+    WidgetRef ref,
+    SettingsState settings,
   ) {
     final isDark = settings.themeMode == ThemeMode.dark;
     return GlassCard(
@@ -73,9 +69,7 @@ class SettingsPage extends ConsumerWidget {
         children: [
           Icon(
             isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-            color: isDark
-                ? GlassColors.liquidPurple
-                : GlassColors.systemOrange,
+            color: isDark ? GlassColors.liquidPurple : GlassColors.systemOrange,
             size: 22,
           ),
           const SizedBox(width: 12),
@@ -83,10 +77,7 @@ class SettingsPage extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Theme',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
+                Text('Theme', style: Theme.of(context).textTheme.bodyLarge),
                 Text(
                   isDark ? 'Dark Mode' : 'Light Mode',
                   style: Theme.of(context).textTheme.bodySmall,
@@ -107,7 +98,9 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Widget _buildCopyBehaviorCard(
-    BuildContext context, WidgetRef ref, SettingsState settings,
+    BuildContext context,
+    WidgetRef ref,
+    SettingsState settings,
   ) {
     return GlassCard(
       child: Column(
@@ -142,18 +135,11 @@ class SettingsPage extends ConsumerWidget {
                 fontSize: 13,
               ),
               items: DuplicateHandling.values
-                  .map(
-                    (h) => DropdownMenuItem(
-                      value: h,
-                      child: Text(h.name),
-                    ),
-                  )
+                  .map((h) => DropdownMenuItem(value: h, child: Text(h.name)))
                   .toList(),
               onChanged: (v) {
                 if (v != null) {
-                  ref
-                      .read(settingsProvider.notifier)
-                      .setDuplicateHandling(v);
+                  ref.read(settingsProvider.notifier).setDuplicateHandling(v);
                 }
               },
             ),
@@ -174,7 +160,9 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Widget _buildPerformanceCard(
-    BuildContext context, WidgetRef ref, SettingsState settings,
+    BuildContext context,
+    WidgetRef ref,
+    SettingsState settings,
   ) {
     return GlassCard(
       child: Column(
@@ -194,12 +182,7 @@ class SettingsPage extends ConsumerWidget {
                 fontSize: 13,
               ),
               items: CopyMode.values
-                  .map(
-                    (m) => DropdownMenuItem(
-                      value: m,
-                      child: Text(m.name),
-                    ),
-                  )
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
                   .toList(),
               onChanged: (v) {
                 if (v != null) {
@@ -226,9 +209,7 @@ class SettingsPage extends ConsumerWidget {
             activeColor: GlassColors.liquidTeal,
             label: '${settings.maxParallelism}',
             onChanged: (v) {
-              ref
-                  .read(settingsProvider.notifier)
-                  .setMaxParallelism(v.toInt());
+              ref.read(settingsProvider.notifier).setMaxParallelism(v.toInt());
             },
           ),
         ],
@@ -244,7 +225,8 @@ class SettingsPage extends ConsumerWidget {
             context,
             icon: Icons.info_outlined,
             title: 'Hafiportrait Manager',
-            subtitle: 'Version 2.0.0\n'
+            subtitle:
+                'Version 2.0.0\n'
                 'Built with Flutter & Rust\n'
                 '© 2026 Hafiportrait',
           ),
@@ -264,7 +246,9 @@ class SettingsPage extends ConsumerWidget {
   }
 
   Widget _buildCloudAccountsCard(
-    BuildContext context, WidgetRef ref, SettingsState settings,
+    BuildContext context,
+    WidgetRef ref,
+    SettingsState settings,
   ) {
     final accounts = settings.r2Accounts;
     return GlassCard(
@@ -283,41 +267,45 @@ class SettingsPage extends ConsumerWidget {
               onPressed: () => _showAddR2Dialog(context, ref),
             ),
           ),
-          if (accounts.isNotEmpty) ...
-            accounts.map((a) => Padding(
-              padding: const EdgeInsets.only(left: 30, top: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.storage, size: 14,
-                      color: GlassColors.systemGray),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${a.name} — ${a.bucket}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
+          if (accounts.isNotEmpty)
+            ...accounts.map(
+              (a) => Padding(
+                padding: const EdgeInsets.only(left: 30, top: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.storage,
+                      size: 14,
+                      color: GlassColors.systemGray,
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 16),
-                    color: GlassColors.systemGray,
-                    onPressed: () {
-                      ref.read(settingsProvider.notifier)
-                          .removeR2Account(a.id);
-                    },
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${a.name} — ${a.bucket}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 16),
+                      color: GlassColors.systemGray,
+                      onPressed: () {
+                        ref
+                            .read(settingsProvider.notifier)
+                            .removeR2Account(a.id);
+                      },
+                    ),
+                  ],
+                ),
               ),
-            )),
+            ),
           _divider(),
           // Google Drive
           _settingsRow(
             context,
             icon: Icons.add_to_drive,
             title: 'Google Drive',
-            subtitle: settings.googleDriveCredentialsPath ??
-                'Not configured',
+            subtitle: settings.googleDriveCredentialsPath ?? 'Not configured',
             trailing: IconButton(
               icon: Icon(
                 settings.googleDriveCredentialsPath != null
@@ -354,34 +342,32 @@ class SettingsPage extends ConsumerWidget {
             children: [
               TextField(
                 controller: nameCtrl,
-                decoration:
-                    const InputDecoration(labelText: 'Name'),
+                decoration: const InputDecoration(labelText: 'Name'),
               ),
               TextField(
                 controller: accountIdCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Account ID'),
+                decoration: const InputDecoration(labelText: 'Account ID'),
               ),
               TextField(
                 controller: accessKeyCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Access Key ID'),
+                decoration: const InputDecoration(labelText: 'Access Key ID'),
               ),
               TextField(
                 controller: secretKeyCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Secret Access Key'),
+                  labelText: 'Secret Access Key',
+                ),
                 obscureText: true,
               ),
               TextField(
                 controller: bucketCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Bucket Name'),
+                decoration: const InputDecoration(labelText: 'Bucket Name'),
               ),
               TextField(
                 controller: publicUrlCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Public URL (optional)'),
+                  labelText: 'Public URL (optional)',
+                ),
               ),
             ],
           ),
@@ -394,9 +380,7 @@ class SettingsPage extends ConsumerWidget {
           FilledButton(
             onPressed: () {
               final account = R2Account(
-                id: DateTime.now()
-                    .millisecondsSinceEpoch
-                    .toString(),
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
                 name: nameCtrl.text,
                 accountId: accountIdCtrl.text,
                 accessKey: accessKeyCtrl.text,
@@ -404,8 +388,7 @@ class SettingsPage extends ConsumerWidget {
                 bucket: bucketCtrl.text,
                 publicUrl: publicUrlCtrl.text,
               );
-              ref.read(settingsProvider.notifier)
-                  .addR2Account(account);
+              ref.read(settingsProvider.notifier).addR2Account(account);
               Navigator.of(ctx).pop();
             },
             child: const Text('Add'),
@@ -415,16 +398,15 @@ class SettingsPage extends ConsumerWidget {
     );
   }
 
-  void _browseGDriveCredentials(
-    BuildContext context, WidgetRef ref,
-  ) async {
+  void _browseGDriveCredentials(BuildContext context, WidgetRef ref) async {
     final result = await FilePicker.platform.pickFiles(
       dialogTitle: 'Select Google Drive credentials.json',
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
     if (result != null && result.files.single.path != null) {
-      ref.read(settingsProvider.notifier)
+      ref
+          .read(settingsProvider.notifier)
           .setGoogleDriveCredentialsPath(result.files.single.path!);
     }
   }
@@ -447,10 +429,7 @@ class SettingsPage extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
+                Text(title, style: Theme.of(context).textTheme.bodyLarge),
                 if (subtitle != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
@@ -471,10 +450,7 @@ class SettingsPage extends ConsumerWidget {
   Widget _divider() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Divider(
-        height: 1,
-        color: Colors.white.withValues(alpha: 0.06),
-      ),
+      child: Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
     );
   }
 

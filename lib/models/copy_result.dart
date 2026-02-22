@@ -12,11 +12,9 @@ class ValidationResult {
     this.duplicatesRemoved = 0,
   });
 
-  int get totalSize =>
-      validFiles.fold<int>(0, (sum, f) => sum + f.size);
+  int get totalSize => validFiles.fold<int>(0, (sum, f) => sum + f.size);
 
-  String get formattedTotalSize =>
-      FileItem.formatFileSize(totalSize);
+  String get formattedTotalSize => FileItem.formatFileSize(totalSize);
 }
 
 /// Result of a copy operation
@@ -43,8 +41,7 @@ class CopyResult {
     this.totalBytesTransferred = 0,
   });
 
-  Duration get duration =>
-      (endTime ?? DateTime.now()).difference(startTime);
+  Duration get duration => (endTime ?? DateTime.now()).difference(startTime);
 
   String get performanceGrade {
     if (averageSpeedMBps > 200) return '🚀 ULTRA FAST';

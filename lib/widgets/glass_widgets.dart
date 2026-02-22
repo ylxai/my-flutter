@@ -26,7 +26,8 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = backgroundColor ??
+    final bgColor =
+        backgroundColor ??
         (isDark ? GlassColors.bgDarkSecondary : GlassColors.bgLightSecondary);
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.08)
@@ -125,9 +126,10 @@ class _GlassButtonState extends State<GlassButton>
       duration: const Duration(milliseconds: 80),
       vsync: this,
     );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnim = Tween<double>(
+      begin: 1.0,
+      end: 0.96,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -166,10 +168,8 @@ class _GlassButtonState extends State<GlassButton>
 
     return AnimatedBuilder(
       animation: _scaleAnim,
-      builder: (context, child) => Transform.scale(
-        scale: _scaleAnim.value,
-        child: child,
-      ),
+      builder: (context, child) =>
+          Transform.scale(scale: _scaleAnim.value, child: child),
       child: SizedBox(
         width: widget.width,
         child: Material(
@@ -182,14 +182,10 @@ class _GlassButtonState extends State<GlassButton>
                     _controller.reverse();
                     widget.onPressed?.call();
                   },
-            onTapCancel:
-                isDisabled ? null : () => _controller.reverse(),
+            onTapCancel: isDisabled ? null : () => _controller.reverse(),
             borderRadius: BorderRadius.circular(10),
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(10),
@@ -268,18 +264,14 @@ class StatCard extends StatelessWidget {
               children: [
                 Text(
                   value,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text(label, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
@@ -316,10 +308,7 @@ class SidebarItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(
-              vertical: 10,
-              horizontal: 12,
-            ),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
             decoration: BoxDecoration(
               color: isActive
                   ? GlassColors.liquidBlue.withValues(alpha: 0.15)
@@ -341,8 +330,7 @@ class SidebarItem extends StatelessWidget {
                   label,
                   style: TextStyle(
                     fontSize: 10,
-                    fontWeight:
-                        isActive ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                     color: isActive
                         ? GlassColors.liquidBlue
                         : GlassColors.sidebarInactive,

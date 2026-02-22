@@ -32,19 +32,19 @@ class ScheduledTask {
   }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'profileName': profileName,
-        'isEnabled': isEnabled,
-        'scheduleType': scheduleType.name,
-        'executionTime': executionTime.inSeconds,
-        'intervalHours': intervalHours,
-        'selectedDays': selectedDays,
-        'lastRun': lastRun?.toIso8601String(),
-        'nextRun': nextRun?.toIso8601String(),
-        'successCount': successCount,
-        'failureCount': failureCount,
-      };
+    'id': id,
+    'name': name,
+    'profileName': profileName,
+    'isEnabled': isEnabled,
+    'scheduleType': scheduleType.name,
+    'executionTime': executionTime.inSeconds,
+    'intervalHours': intervalHours,
+    'selectedDays': selectedDays,
+    'lastRun': lastRun?.toIso8601String(),
+    'nextRun': nextRun?.toIso8601String(),
+    'successCount': successCount,
+    'failureCount': failureCount,
+  };
 
   factory ScheduledTask.fromJson(Map<String, dynamic> json) {
     return ScheduledTask(
@@ -56,12 +56,9 @@ class ScheduledTask {
         (e) => e.name == json['scheduleType'],
         orElse: () => ScheduleType.daily,
       ),
-      executionTime:
-          Duration(seconds: json['executionTime'] as int? ?? 7200),
+      executionTime: Duration(seconds: json['executionTime'] as int? ?? 7200),
       intervalHours: json['intervalHours'] as int? ?? 24,
-      selectedDays: (json['selectedDays'] as List<dynamic>?)
-              ?.cast<int>() ??
-          [],
+      selectedDays: (json['selectedDays'] as List<dynamic>?)?.cast<int>() ?? [],
       lastRun: json['lastRun'] != null
           ? DateTime.parse(json['lastRun'] as String)
           : null,
