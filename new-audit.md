@@ -158,30 +158,20 @@ fn copy_memory_mapped(src: &Path, dst: &Path) -> io::Result<u64> {
 - **Location:** `rust/src/parallel.rs:71-74`
 - **Detected language:** Rust
 - **Issue:** Each `copy_files_parallel` call creates a new ThreadPool. No reuse, potential thread exhaustion under load, and overhead of thread creation.
-- **Evidence:** 
-  ```rust
-  let pool = rayon::ThreadPoolBuilder::new()
-      .num_threads(max_threads)
-      .build()
-      .unwrap_or_else(|_| rayon::ThreadPoolBuilder::new().build().unwrap());
-  ```
 - **Crash or race condition risk:** MEDIUM - Resource exhaustion, performance degradation
 - **Severity:** HIGH
-- **Fix:** Use global thread pool or rayon's default:
+- **Status:** FIXED
+- **Resolution:** Thread pool kini dikonfigurasi sekali menggunakan `build_global()` lewat `Once`, sehingga pemanggilan batch berikutnya memakai pool global.
+- **Fix (implemented):**
 ```rust
-pub fn copy_files_parallel(
-    files: Vec<FileEntry>,
-    max_threads: usize,
-    // ... other params
-) -> BatchCopyResult {
-    // Configure global pool once at startup, or use default
-    let results: Vec<FileCopyResult> = files
-        .par_iter()
-        .with_max_len(max_threads)
-        .map(|entry| {
-            // ... copy logic ...
-        })
-        .collect();
+static GLOBAL_POOL_INIT: Once = Once::new();
+
+fn configure_global_pool(max_threads: usize) {
+    GLOBAL_POOL_INIT.call_once(|| {
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(max_threads.max(1))
+            .build_global();
+    });
 }
 ```
 

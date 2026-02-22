@@ -6,7 +6,7 @@ use crossbeam_channel::Sender;
 use rayon::prelude::*;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use std::time::Instant;
 
 use crate::file_copy::{self, FileCopyResult};
@@ -48,6 +48,16 @@ pub struct FileEntry {
     pub size: u64,
 }
 
+static GLOBAL_POOL_INIT: Once = Once::new();
+
+fn configure_global_pool(max_threads: usize) {
+    GLOBAL_POOL_INIT.call_once(|| {
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(max_threads.max(1))
+            .build_global();
+    });
+}
+
 /// Copy files in parallel with progress reporting
 pub fn copy_files_parallel(
     files: Vec<FileEntry>,
@@ -67,112 +77,106 @@ pub fn copy_files_parallel(
     let skipped = Arc::new(AtomicU64::new(0));
     let failed = Arc::new(AtomicU64::new(0));
 
-    // Configure rayon thread pool
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(max_threads)
-        .build()
-        .unwrap_or_else(|_| rayon::ThreadPoolBuilder::new().build().unwrap());
+    configure_global_pool(max_threads);
 
-    let results: Vec<FileCopyResult> = pool.install(|| {
-        files
-            .par_iter()
-            .map(|entry| {
-                // Check cancellation
+    let results: Vec<FileCopyResult> = files
+        .par_iter()
+        .map(|entry| {
+            // Check cancellation
+            if cancel_flag.load(Ordering::Relaxed) {
+                return FileCopyResult {
+                    source_path: entry.source_path.clone(),
+                    dest_path: entry.dest_path.clone(),
+                    bytes_copied: 0,
+                    duration_ms: 0,
+                    speed_mbps: 0.0,
+                    strategy_used: "Cancelled".to_string(),
+                    success: false,
+                    error: Some("Cancelled by user".to_string()),
+                    skipped: false,
+                };
+            }
+
+            // Wait while paused
+            while pause_flag.load(Ordering::Relaxed) {
                 if cancel_flag.load(Ordering::Relaxed) {
-                    return FileCopyResult {
-                        source_path: entry.source_path.clone(),
-                        dest_path: entry.dest_path.clone(),
-                        bytes_copied: 0,
-                        duration_ms: 0,
-                        speed_mbps: 0.0,
-                        strategy_used: "Cancelled".to_string(),
-                        success: false,
-                        error: Some("Cancelled by user".to_string()),
-                        skipped: false,
-                    };
+                    break;
                 }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
 
-                // Wait while paused
-                while pause_flag.load(Ordering::Relaxed) {
-                    if cancel_flag.load(Ordering::Relaxed) {
-                        break;
+            let src = Path::new(&entry.source_path);
+            let dst = Path::new(&entry.dest_path);
+
+            let mut file_result = match file_copy::copy_file(src, dst, skip_existing) {
+                Ok(r) => r,
+                Err(e) => FileCopyResult {
+                    source_path: entry.source_path.clone(),
+                    dest_path: entry.dest_path.clone(),
+                    bytes_copied: 0,
+                    duration_ms: 0,
+                    speed_mbps: 0.0,
+                    strategy_used: "Error".to_string(),
+                    success: false,
+                    error: Some(e.to_string()),
+                    skipped: false,
+                },
+            };
+
+            if verify_hash && file_result.success && !file_result.skipped {
+                match hash::verify_files_match(src, dst, &HashAlgorithm::Sha256) {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        file_result.success = false;
+                        file_result.error = Some("Hash mismatch".to_string());
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    Err(e) => {
+                        file_result.success = false;
+                        file_result.error = Some(format!("Verify failed: {}", e));
+                    }
                 }
+            }
 
-                let src = Path::new(&entry.source_path);
-                let dst = Path::new(&entry.dest_path);
+            if file_result.skipped {
+                skipped.fetch_add(1, Ordering::Relaxed);
+            } else if file_result.success {
+                bytes_copied.fetch_add(file_result.bytes_copied, Ordering::Relaxed);
+            } else {
+                failed.fetch_add(1, Ordering::Relaxed);
+            }
 
-                let mut file_result = match file_copy::copy_file(src, dst, skip_existing) {
-                    Ok(r) => r,
-                    Err(e) => FileCopyResult {
-                        source_path: entry.source_path.clone(),
-                        dest_path: entry.dest_path.clone(),
-                        bytes_copied: 0,
-                        duration_ms: 0,
-                        speed_mbps: 0.0,
-                        strategy_used: "Error".to_string(),
-                        success: false,
-                        error: Some(e.to_string()),
-                        skipped: false,
-                    },
+            let idx = processed.fetch_add(1, Ordering::Relaxed) + 1;
+
+            // Send progress update
+            if let Some(ref tx) = progress_tx {
+                let elapsed = start.elapsed().as_secs_f64();
+                let copied = bytes_copied.load(Ordering::Relaxed);
+                let speed = if elapsed > 0.0 {
+                    (copied as f64 / 1024.0 / 1024.0) / elapsed
+                } else {
+                    0.0
                 };
 
-                if verify_hash && file_result.success && !file_result.skipped {
-                    match hash::verify_files_match(src, dst, &HashAlgorithm::Sha256) {
-                        Ok(true) => {}
-                        Ok(false) => {
-                            file_result.success = false;
-                            file_result.error = Some("Hash mismatch".to_string());
-                        }
-                        Err(e) => {
-                            file_result.success = false;
-                            file_result.error = Some(format!("Verify failed: {}", e));
-                        }
-                    }
-                }
+                let _ = tx.try_send(CopyProgress {
+                    total_files,
+                    processed_files: idx as u32,
+                    current_file: entry
+                        .source_path
+                        .rsplit(['/', '\\'])
+                        .next()
+                        .unwrap_or("")
+                        .to_string(),
+                    bytes_copied: copied,
+                    total_bytes,
+                    speed_mbps: speed,
+                    skipped_count: skipped.load(Ordering::Relaxed) as u32,
+                    failed_count: failed.load(Ordering::Relaxed) as u32,
+                });
+            }
 
-                if file_result.skipped {
-                    skipped.fetch_add(1, Ordering::Relaxed);
-                } else if file_result.success {
-                    bytes_copied.fetch_add(file_result.bytes_copied, Ordering::Relaxed);
-                } else {
-                    failed.fetch_add(1, Ordering::Relaxed);
-                }
-
-                let idx = processed.fetch_add(1, Ordering::Relaxed) + 1;
-
-                // Send progress update
-                if let Some(ref tx) = progress_tx {
-                    let elapsed = start.elapsed().as_secs_f64();
-                    let copied = bytes_copied.load(Ordering::Relaxed);
-                    let speed = if elapsed > 0.0 {
-                        (copied as f64 / 1024.0 / 1024.0) / elapsed
-                    } else {
-                        0.0
-                    };
-
-                    let _ = tx.try_send(CopyProgress {
-                        total_files,
-                        processed_files: idx as u32,
-                        current_file: entry
-                            .source_path
-                            .rsplit(['/', '\\'])
-                            .next()
-                            .unwrap_or("")
-                            .to_string(),
-                        bytes_copied: copied,
-                        total_bytes,
-                        speed_mbps: speed,
-                        skipped_count: skipped.load(Ordering::Relaxed) as u32,
-                        failed_count: failed.load(Ordering::Relaxed) as u32,
-                    });
-                }
-
-                file_result
-            })
-            .collect()
-    });
+            file_result
+        })
+        .collect();
 
     let duration = start.elapsed();
     let total_copied = bytes_copied.load(Ordering::Relaxed);
