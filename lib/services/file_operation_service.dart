@@ -6,6 +6,7 @@ import '../constants/file_constants.dart';
 import '../models/file_item.dart';
 import '../models/copy_result.dart';
 import '../models/performance_settings.dart';
+import '../utils/file_utils.dart';
 
 /// Thread-safe work queue untuk parallel copy.
 ///
@@ -131,7 +132,6 @@ class FileOperationService {
       var scannedCount = 0;
 
       void scanDir(Directory current, int depth) {
-        if (depth >= ScanLimits.maxDepth) return;
         if (scannedCount >= ScanLimits.maxFiles) return;
 
         final List<FileSystemEntity> entities;
@@ -144,7 +144,10 @@ class FileOperationService {
         for (final entity in entities) {
           if (scannedCount >= ScanLimits.maxFiles) return;
 
-          if (entity is Directory) {
+          if (entity is Directory && depth < ScanLimits.maxDepth) {
+            // ✅ FIX: Konsisten dengan _scanForImages — gunakan depth < maxDepth
+            // agar effective depth 0..(maxDepth-1) = 10 levels di kedua tempat.
+            // Sebelumnya: depth > maxDepth (allow 11 levels) — inkonsisten!
             scanDir(entity, depth + 1);
           } else if (entity is File) {
             final name = _fileNameWithoutExt(entity.path).toLowerCase();
@@ -522,58 +525,30 @@ class FileOperationService {
     // Solusi yang benar: ScanLimits.maxFiles + ScanLimits.maxDepth sudah
     // menjadi hard stop di dalam isolate — scan pasti selesai dalam waktu
     // wajar tanpa perlu timeout eksternal. Ini lebih efisien dan jujur.
+    // ✅ FIX #3 Refactor: Delegasi ke [FileUtils.scanDirSync] — satu implementasi
+    // terpusat, tidak ada duplikasi dengan upload_orchestrator._scanForImages.
     try {
       return await Isolate.run(() {
-        final dir = Directory(folderPath);
-        if (!dir.existsSync()) return <FileItem>[];
-
-        final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
-        final localResults = <FileItem>[];
-
-        // Rekursif manual dengan batas depth dan jumlah file.
-        // ScanLimits.maxFiles + ScanLimits.maxDepth adalah hard stop
-        // yang memastikan isolate selesai dalam waktu wajar tanpa
-        // perlu timeout eksternal yang misleading.
-        void scanDir(Directory current, int depth) {
-          if (depth >= ScanLimits.maxDepth) return;
-          if (localResults.length >= ScanLimits.maxFiles) return;
-
-          final List<FileSystemEntity> entities;
+        final paths = FileUtils.scanDirSync(folderPath, extensions: extensions);
+        final results = <FileItem>[];
+        for (final path in paths) {
           try {
-            entities = current.listSync(recursive: false, followLinks: false);
+            final entity = File(path);
+            final stat = entity.statSync();
+            results.add(
+              FileItem(
+                path: path,
+                name: _fileName(path),
+                size: stat.size,
+                createdDate: stat.changed,
+                modifiedDate: stat.modified,
+              ),
+            );
           } catch (_) {
-            return; // Skip folder yang tidak bisa diakses (permission denied)
-          }
-
-          for (final entity in entities) {
-            if (localResults.length >= ScanLimits.maxFiles) return;
-
-            if (entity is Directory) {
-              scanDir(entity, depth + 1);
-            } else if (entity is File) {
-              final ext = _fileExtension(entity.path).toLowerCase();
-              if (!normalizedExt.contains(ext)) continue;
-
-              try {
-                final stat = entity.statSync();
-                localResults.add(
-                  FileItem(
-                    path: entity.path,
-                    name: _fileName(entity.path),
-                    size: stat.size,
-                    createdDate: stat.changed,
-                    modifiedDate: stat.modified,
-                  ),
-                );
-              } catch (_) {
-                // Skip file yang tidak bisa dibaca stat-nya
-              }
-            }
+            // Skip file yang tidak bisa dibaca stat-nya
           }
         }
-
-        scanDir(dir, 0);
-        return localResults;
+        return results;
       });
     } catch (_) {
       return <FileItem>[]; // isolate error: kembalikan list kosong

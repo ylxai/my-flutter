@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:uuid/uuid.dart';
 
 import '../theme/glass_colors.dart';
 import '../widgets/glass_widgets.dart';
@@ -204,8 +205,11 @@ class SettingsPage extends ConsumerWidget {
           Slider(
             value: settings.maxParallelism.toDouble(),
             min: 1,
-            max: Platform.numberOfProcessors.toDouble() * 3,
-            divisions: Platform.numberOfProcessors * 3 - 1,
+            // ✅ FIX #6: max dan divisions harus konsisten.
+            // max = numberOfProcessors * 2 (bukan *3 yang berlebihan).
+            // divisions = max - min = (nCpu * 2) - 1 agar setiap tick = 1 thread.
+            max: Platform.numberOfProcessors.toDouble() * 2,
+            divisions: Platform.numberOfProcessors * 2 - 1,
             activeColor: GlassColors.liquidTeal,
             label: '${settings.maxParallelism}',
             onChanged: (v) {
@@ -379,8 +383,10 @@ class SettingsPage extends ConsumerWidget {
           ),
           FilledButton(
             onPressed: () {
+              // ✅ FIX #2: Pakai UUID v4 bukan timestamp — tidak bisa collision
+              // meski 2 account ditambah dalam 1ms yang sama.
               final account = R2Account(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                id: const Uuid().v4(),
                 name: nameCtrl.text,
                 accountId: accountIdCtrl.text,
                 accessKey: accessKeyCtrl.text,
@@ -404,6 +410,9 @@ class SettingsPage extends ConsumerWidget {
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
+    // ✅ FIX #3: Guard mounted check setelah await — widget bisa dispose
+    // saat FilePicker dialog masih terbuka. ref.read setelah dispose = crash.
+    if (!context.mounted) return;
     if (result != null && result.files.single.path != null) {
       ref
           .read(settingsProvider.notifier)

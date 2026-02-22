@@ -57,6 +57,19 @@
 
 ---
 
+## 🔵 Post-Merge Fixes (Ditemukan saat review ulang)
+
+- [x] **PM-1** — Retry jitter bisa negatif → `clamp(0.0, maxMs)` di `_retryDelay`
+- [x] **PM-2** — `PauseController` mutex `.expect()` panic → `let Ok() else {}` + match graceful
+- [x] **PM-3** — Double `ref.read(settingsProvider)` di `publish_page.dart` → baca sekali
+- [x] **PM-4** — `R2Account.id` pakai timestamp → `Uuid().v4()`
+- [x] **PM-5** — `async` tanpa `mounted` check di `settings_page.dart` → guard `!context.mounted`
+- [x] **PM-6** — `_scanFolder` tidak handle error di `gallery_page.dart` → catch + SnackBar
+- [x] **PM-7** — `'png'` hardcoded di `publish_page.dart` → `kExtraImageExtensions`
+- [x] **PM-8** — Slider divisions off-by-one di `settings_page.dart` → `nCpu*2-1`
+
+---
+
 ## 🟡 P2 — PENINGKATAN (Selesaikan sebelum release)
 
 - [x] **P2-1** — `main_screen.dart` terlalu besar, logika UI campur bisnis ✅ SELESAI
