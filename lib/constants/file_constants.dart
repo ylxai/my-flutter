@@ -24,18 +24,10 @@ const List<String> kRawExtensions = [
 ];
 
 /// Ekstensi JPEG yang didukung (lowercase, tanpa titik).
-const List<String> kJpgExtensions = [
-  'jpg',
-  'jpeg',
-];
+const List<String> kJpgExtensions = ['jpg', 'jpeg'];
 
 /// Ekstensi gambar tambahan yang didukung untuk scanning (bukan copy).
-const List<String> kExtraImageExtensions = [
-  'png',
-  'tiff',
-  'bmp',
-  'webp',
-];
+const List<String> kExtraImageExtensions = ['png', 'tiff', 'bmp', 'webp'];
 
 /// Semua ekstensi yang valid untuk operasi copy (RAW + JPG).
 const List<String> kCopyExtensions = [...kRawExtensions, ...kJpgExtensions];

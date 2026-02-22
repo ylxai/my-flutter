@@ -58,6 +58,7 @@ class CopyProgress {
   final int totalFiles;
   final int processedFiles;
   final String currentFileName;
+
   /// Path lengkap file yang sedang diproses — digunakan untuk tracking
   /// per-file berdasarkan path identity (bukan nama) agar tidak collision
   /// ketika ada dua file dengan nama sama di folder berbeda.

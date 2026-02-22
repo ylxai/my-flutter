@@ -143,9 +143,7 @@ class CopyNotifier extends Notifier<CopyState> {
     final failedPaths = <String>{};
 
     // Build map path → FileItem untuk lookup O(1)
-    final fileByPath = <String, FileItem>{
-      for (final f in allFiles) f.path: f,
-    };
+    final fileByPath = <String, FileItem>{for (final f in allFiles) f.path: f};
 
     try {
       final stream = _fileService.copyFiles(
@@ -206,8 +204,7 @@ class CopyNotifier extends Notifier<CopyState> {
       final successfulFiles = allFiles
           .where(
             (f) =>
-                !failedPaths.contains(f.path) &&
-                !skippedPaths.contains(f.path),
+                !failedPaths.contains(f.path) && !skippedPaths.contains(f.path),
           )
           .toList();
 

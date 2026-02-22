@@ -174,7 +174,9 @@ class CopyController {
           if (names.isNotEmpty) {
             if (buffer.isNotEmpty) buffer.write('\n');
             buffer.write(names.join('\n'));
-            addLog('📄 Imported ${names.length} names from ${ext.toUpperCase()}');
+            addLog(
+              '📄 Imported ${names.length} names from ${ext.toUpperCase()}',
+            );
             changed = true;
           }
         } catch (e) {
