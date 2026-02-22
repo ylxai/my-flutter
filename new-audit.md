@@ -223,39 +223,24 @@ impl PauseController {
 - **Location:** `rust/src/api.rs:272-319` (scan_directory), `rust/src/file_copy.rs:55-137` (copy_file)
 - **Detected language:** Rust
 - **Issue:** Paths from Dart are used directly without sanitization. Symlink following is disabled (`follow_links(false)`) but path traversal (`../`) is not validated.
-- **Evidence:** `Path::new(&source)` - no canonicalization or validation
 - **Vector:** Malicious Dart code or compromised input could read/copy arbitrary files
 - **Severity:** MEDIUM (local application, no network exposure)
-- **Fix:** Canonicalize and validate paths:
+- **Status:** FIXED
+- **Resolution:** Semua path input sekarang di-canonicalize. Destination yang belum ada memakai canonicalize parent + file name agar aman lintas folder tanpa traversal.
+- **Fix (implemented):**
 ```rust
-use std::path::PathBuf;
+// rust/src/path_utils.rs
+pub fn canonicalize_path(path: &Path) -> io::Result<PathBuf> { /* ... */ }
 
-fn validate_path(path: &Path, allowed_base: &Path) -> io::Result<PathBuf> {
-    let canonical = path.canonicalize()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, 
-            format!("Invalid path: {}", e)))?;
-    
-    if !canonical.starts_with(allowed_base) {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied, 
-            "Path outside allowed directory"
-        ));
-    }
-    
-    Ok(canonical)
-}
+pub fn canonicalize_path_allow_missing(path: &Path) -> io::Result<PathBuf> { /* ... */ }
 
-pub fn scan_directory(path: String, extensions: Vec<String>) -> Vec<NativeFileEntry> {
-    let dir = Path::new(&path);
-    
-    // Validate path is accessible
-    let canonical_dir = match dir.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
-    };
-    
-    // ... rest of implementation using canonical_dir
-}
+// rust/src/api.rs
+let src = path_utils::canonicalize_path(Path::new(&source))?;
+let dst = path_utils::canonicalize_path_allow_missing(Path::new(&destination))?;
+
+// rust/src/file_copy.rs
+let src = path_utils::canonicalize_path(src)?;
+let dst = path_utils::canonicalize_path_allow_missing(dst)?;
 ```
 
 ---

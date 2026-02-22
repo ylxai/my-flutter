@@ -12,6 +12,7 @@ use crate::file_copy;
 use crate::hash;
 use crate::image_processing;
 use crate::parallel;
+use crate::path_utils;
 
 // ── Data Transfer Objects (mirrored in Dart) ──
 
@@ -127,10 +128,40 @@ fn copy_single_file_inner(
     destination: String,
     skip_existing: bool,
 ) -> NativeFileCopyResult {
-    let src = Path::new(&source);
-    let dst = Path::new(&destination);
+    let src = match path_utils::canonicalize_path(Path::new(&source)) {
+        Ok(path) => path,
+        Err(e) => {
+            return NativeFileCopyResult {
+                source_path: source,
+                dest_path: destination,
+                bytes_copied: 0,
+                duration_ms: 0,
+                speed_mbps: 0.0,
+                strategy_used: "Error".to_string(),
+                success: false,
+                error_message: e.to_string(),
+                skipped: false,
+            };
+        }
+    };
+    let dst = match path_utils::canonicalize_path_allow_missing(Path::new(&destination)) {
+        Ok(path) => path,
+        Err(e) => {
+            return NativeFileCopyResult {
+                source_path: source,
+                dest_path: destination,
+                bytes_copied: 0,
+                duration_ms: 0,
+                speed_mbps: 0.0,
+                strategy_used: "Error".to_string(),
+                success: false,
+                error_message: e.to_string(),
+                skipped: false,
+            };
+        }
+    };
 
-    match file_copy::copy_file(src, dst, skip_existing) {
+    match file_copy::copy_file(&src, &dst, skip_existing) {
         Ok(r) => NativeFileCopyResult {
             source_path: r.source_path,
             dest_path: r.dest_path,
@@ -384,14 +415,17 @@ pub fn scan_directory(path: String, extensions: Vec<String>) -> Vec<NativeFileEn
 }
 
 fn scan_directory_inner(path: String, extensions: Vec<String>) -> Vec<NativeFileEntry> {
-    let dir = Path::new(&path);
+    let dir = match path_utils::canonicalize_path(Path::new(&path)) {
+        Ok(path) => path,
+        Err(_) => return Vec::new(),
+    };
     if !dir.is_dir() {
         return Vec::new();
     }
 
     let mut results = Vec::new();
 
-    let entries = walkdir::WalkDir::new(dir)
+    let entries = walkdir::WalkDir::new(&dir)
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok());
@@ -464,11 +498,18 @@ fn process_images_for_upload_inner(
         preview_quality,
     };
 
-    let paths: Vec<std::path::PathBuf> =
-        source_paths.iter().map(std::path::PathBuf::from).collect();
+    let paths: Vec<std::path::PathBuf> = source_paths
+        .iter()
+        .filter_map(|source| path_utils::canonicalize_path(Path::new(source)).ok())
+        .collect();
 
-    let out = Path::new(&output_dir);
-    let results = image_processing::process_batch(&paths, out, &config);
+    let out = match path_utils::canonicalize_path(Path::new(&output_dir)) {
+        Ok(path) => path,
+        Err(_) => {
+            return Vec::new();
+        }
+    };
+    let results = image_processing::process_batch(&paths, &out, &config);
 
     results
         .into_iter()

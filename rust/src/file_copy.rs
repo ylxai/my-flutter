@@ -11,6 +11,7 @@ use std::io::{self, Read, Write, BufReader, BufWriter};
 use std::path::Path;
 
 use crate::platform;
+use crate::path_utils;
 
 const SMALL_FILE_THRESHOLD: u64 = 10 * 1024 * 1024; // 10MB
 const LARGE_FILE_THRESHOLD: u64 = 1024 * 1024 * 1024; // 1GB
@@ -58,6 +59,8 @@ pub fn copy_file(
     skip_existing: bool,
 ) -> io::Result<FileCopyResult> {
     let start = std::time::Instant::now();
+    let src = path_utils::canonicalize_path(src)?;
+    let dst = path_utils::canonicalize_path_allow_missing(dst)?;
     let src_str = src.to_string_lossy().to_string();
     let dst_str = dst.to_string_lossy().to_string();
 
@@ -142,8 +145,8 @@ fn copy_buffered(src: &Path, dst: &Path) -> io::Result<u64> {
         fs::create_dir_all(parent)?;
     }
 
-    let src_file = File::open(src)?;
-    let dst_file = File::create(dst)?;
+    let src_file = File::open(&src)?;
+    let dst_file = File::create(&dst)?;
 
     let mut reader = BufReader::with_capacity(BUFFER_SIZE, src_file);
     let mut writer = BufWriter::with_capacity(BUFFER_SIZE, dst_file);
@@ -169,12 +172,12 @@ fn copy_memory_mapped(src: &Path, dst: &Path) -> io::Result<u64> {
         fs::create_dir_all(parent)?;
     }
 
-    let src_file = File::open(src)?;
+    let src_file = File::open(&src)?;
     let src_meta = src_file.metadata()?;
     let file_size = src_meta.len();
 
     if file_size == 0 {
-        File::create(dst)?;
+        File::create(&dst)?;
         return Ok(0);
     }
 
@@ -187,7 +190,7 @@ fn copy_memory_mapped(src: &Path, dst: &Path) -> io::Result<u64> {
         .write(true)
         .create(true)
         .truncate(true)
-        .open(dst)?;
+        .open(&dst)?;
 
     dst_file.set_len(file_size)?;
 
@@ -204,19 +207,19 @@ fn copy_chunked_mmap(src: &Path, dst: &Path) -> io::Result<u64> {
         fs::create_dir_all(parent)?;
     }
 
-    let src_file = File::open(src)?;
+    let src_file = File::open(&src)?;
     let src_meta = src_file.metadata()?;
     let file_size = src_meta.len();
 
     if file_size == 0 {
-        File::create(dst)?;
+        File::create(&dst)?;
         return Ok(0);
     }
 
     // Pre-allocate destination
-    platform::preallocate_file(dst, file_size)?;
+    platform::preallocate_file(&dst, file_size)?;
 
-    let dst_file = OpenOptions::new().write(true).open(dst)?;
+    let dst_file = OpenOptions::new().write(true).open(&dst)?;
 
     let mut offset: u64 = 0;
     while offset < file_size {

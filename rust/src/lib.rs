@@ -4,4 +4,5 @@ pub mod file_copy;
 pub mod hash;
 pub mod image_processing;
 pub mod parallel;
+pub mod path_utils;
 pub mod platform;
