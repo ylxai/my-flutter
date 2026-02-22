@@ -327,11 +327,9 @@ pub struct NativeFileCopyResult {
 - **Issue:** The `copy_file_range` extern block is declared but unused. The actual call uses `libc::copy_file_range` which is correct.
 - **Evidence:** Lines 89-98 declare extern but line 47-56 uses `libc::copy_file_range`
 - **Severity:** LOW (dead code)
-- **Fix:** Remove unused extern block:
-```rust
-// Remove lines 89-98
-// The libc crate provides the correct binding
-```
+- **Status:** FIXED
+- **Resolution:** Blok `extern` yang tidak dipakai sudah dihapus.
+- **Fix (implemented):** Remove unused extern block.
 
 ---
 

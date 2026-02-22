@@ -86,13 +86,3 @@ pub fn fallocate_file(path: &Path, size: u64) -> io::Result<()> {
     Ok(())
 }
 
-extern "C" {
-    fn copy_file_range(
-        fd_in: libc::c_int,
-        off_in: *mut libc::off_t,
-        fd_out: libc::c_int,
-        off_out: *mut libc::off_t,
-        len: libc::size_t,
-        flags: libc::c_uint,
-    ) -> libc::ssize_t;
-}
