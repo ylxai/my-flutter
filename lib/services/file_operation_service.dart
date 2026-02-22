@@ -131,7 +131,7 @@ class FileOperationService {
       var scannedCount = 0;
 
       void scanDir(Directory current, int depth) {
-        if (depth > ScanLimits.maxDepth) return;
+        if (depth >= ScanLimits.maxDepth) return;
         if (scannedCount >= ScanLimits.maxFiles) return;
 
         final List<FileSystemEntity> entities;
@@ -535,7 +535,7 @@ class FileOperationService {
         // yang memastikan isolate selesai dalam waktu wajar tanpa
         // perlu timeout eksternal yang misleading.
         void scanDir(Directory current, int depth) {
-          if (depth > ScanLimits.maxDepth) return;
+          if (depth >= ScanLimits.maxDepth) return;
           if (localResults.length >= ScanLimits.maxFiles) return;
 
           final List<FileSystemEntity> entities;
