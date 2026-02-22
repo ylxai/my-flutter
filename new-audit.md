@@ -136,7 +136,9 @@ pub fn cancel_copy() {
 - **Drop/free correctness:** Correct - memmap2 handles munmap
 - **Leak / UAF / double-free risk:** LOW under normal operation, CRITICAL if panic crosses FFI
 - **Severity:** HIGH
-- **Fix:** Wrap mmap operations in panic handler:
+- **Status:** FIXED
+- **Resolution:** Operasi `mmap` sekarang dibungkus `catch_unwind` untuk mencegah panic melintasi batas FFI, baik pada copy mmap biasa maupun chunked.
+- **Fix (implemented):**
 ```rust
 fn copy_memory_mapped(src: &Path, dst: &Path) -> io::Result<u64> {
     // ... setup code ...
@@ -144,8 +146,7 @@ fn copy_memory_mapped(src: &Path, dst: &Path) -> io::Result<u64> {
     let mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         unsafe { MmapOptions::new().map(&src_file) }
     }))
-    .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))?
-    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))??;
     
     // ... rest of implementation ...
 }

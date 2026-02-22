@@ -178,7 +178,10 @@ fn copy_memory_mapped(src: &Path, dst: &Path) -> io::Result<u64> {
         return Ok(0);
     }
 
-    let mmap = unsafe { MmapOptions::new().map(&src_file)? };
+    let mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        unsafe { MmapOptions::new().map(&src_file) }
+    }))
+    .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))??;
 
     let dst_file = OpenOptions::new()
         .write(true)
@@ -220,19 +223,25 @@ fn copy_chunked_mmap(src: &Path, dst: &Path) -> io::Result<u64> {
         let remaining = file_size - offset;
         let chunk_len = std::cmp::min(remaining as usize, MMAP_CHUNK_SIZE);
 
-        let src_mmap = unsafe {
-            MmapOptions::new()
-                .offset(offset)
-                .len(chunk_len)
-                .map(&src_file)?
-        };
+        let src_mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            unsafe {
+                MmapOptions::new()
+                    .offset(offset)
+                    .len(chunk_len)
+                    .map(&src_file)
+            }
+        }))
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))??;
 
-        let mut dst_mmap = unsafe {
-            MmapOptions::new()
-                .offset(offset)
-                .len(chunk_len)
-                .map_mut(&dst_file)?
-        };
+        let mut dst_mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            unsafe {
+                MmapOptions::new()
+                    .offset(offset)
+                    .len(chunk_len)
+                    .map_mut(&dst_file)
+            }
+        }))
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))??;
 
         dst_mmap.copy_from_slice(&src_mmap);
         dst_mmap.flush()?;
