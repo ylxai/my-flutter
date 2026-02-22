@@ -56,15 +56,28 @@ fn decode_image(
     source_path: &Path,
     source_str: &str,
     start: &Instant,
-) -> Result<DynamicImage, ImageProcessResult> {
-    let reader = ImageReader::open(source_path)
-        .map_err(|e| make_error(source_str, start, &format!("Open failed: {}", e)))?;
-    let reader = reader
-        .with_guessed_format()
-        .map_err(|e| make_error(source_str, start, &format!("Format guess failed: {}", e)))?;
-    reader
-        .decode()
-        .map_err(|e| make_error(source_str, start, &format!("Decode failed: {}", e)))
+) -> Result<DynamicImage, Box<ImageProcessResult>> {
+    let reader = ImageReader::open(source_path).map_err(|e| {
+        Box::new(make_error(
+            source_str,
+            start,
+            &format!("Open failed: {}", e),
+        ))
+    })?;
+    let reader = reader.with_guessed_format().map_err(|e| {
+        Box::new(make_error(
+            source_str,
+            start,
+            &format!("Format guess failed: {}", e),
+        ))
+    })?;
+    reader.decode().map_err(|e| {
+        Box::new(make_error(
+            source_str,
+            start,
+            &format!("Decode failed: {}", e),
+        ))
+    })
 }
 
 /// Process a single image: generate thumbnail + preview in WebP.
@@ -92,7 +105,7 @@ pub fn process_image(
     // Pass &start agar start tidak di-move, masih bisa dipakai di bawah
     let img = match decode_image(source_path, &source_str, &start) {
         Ok(img) => img,
-        Err(result) => return result,
+        Err(boxed) => return *boxed,
     };
 
     if let Err(e) =
@@ -127,27 +140,19 @@ pub fn process_image(
 
 /// Process multiple images secara paralel menggunakan rayon.
 ///
-/// ✅ FIX P2: Menggunakan [decode_image] yang terpusat — tidak ada duplikasi
-/// logika decode antara process_image dan process_batch.
+/// Menggunakan `decode_image()` terpusat — tidak ada duplikasi logika decode.
 ///
-/// ✅ FIX #5: Batasi concurrency rayon untuk mencegah OOM.
-/// Tanpa batas, rayon akan memproses SEMUA gambar secara paralel sekaligus —
-/// 100 foto RAW @30MB = 3GB RAM hanya untuk decode. Solusi: gunakan thread
-/// pool lokal dengan jumlah thread = min(CPU/2, 4) agar:
-/// - Maksimum ~4 gambar di-decode bersamaan
-/// - Sisanya antri dan menunggu slot bebas
-/// - Total RAM usage terkontrol
+/// Concurrency dibatasi via thread pool lokal `clamp(CPU/2, 1, 4)` untuk
+/// mencegah OOM: 100 foto RAW @30MB = 3GB RAM jika semua di-decode sekaligus.
 ///
 /// Output path per file:
-/// - thumbnail → `{output_dir}/thumbs/{stem}.webp`
-/// - preview   → `{output_dir}/previews/{stem}.webp`
-/// ✅ FIX #1: Tambah `cancel_flag` parameter agar user bisa menghentikan
-/// batch processing dari Flutter. Sebelumnya process_batch tidak pernah
-/// mengecek cancel — user harus menunggu SEMUA foto selesai diproses.
 ///
-/// cancel_flag di-check di awal setiap file processing:
-/// - Jika true: kembalikan result dengan cancelled=true (skipped)
-/// - Jika false: proses normal
+/// - thumbnail: `{output_dir}/thumbs/{stem}.webp`
+/// - preview: `{output_dir}/previews/{stem}.webp`
+///
+/// Parameter `cancel_flag` memungkinkan Flutter menghentikan batch processing.
+/// Flag dicek di awal setiap file — file yang di-cancel dikembalikan sebagai
+/// result dengan `success=false` dan `error_message="Cancelled"`.
 pub fn process_batch(
     source_paths: &[PathBuf],
     output_dir: &Path,
@@ -200,7 +205,7 @@ pub fn process_batch(
 
                 let img = match decode_image(src, &source_str, &start) {
                     Ok(img) => img,
-                    Err(result) => return result,
+                    Err(boxed) => return *boxed,
                 };
 
                 let thumb_path = thumbs_dir.join(format!("{}.webp", stem));
