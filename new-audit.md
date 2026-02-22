@@ -99,7 +99,9 @@ pub fn cancel_copy() {
 - **Native error path:** Invalid UTF-8 bytes passed from Dart
 - **Dart propagation:** None - application crash
 - **Severity:** HIGH
-- **Fix:** This is in generated code. Mitigation strategies:
+- **Status:** MITIGATED
+- **Resolution:** Semua API publik sudah dibungkus `catch_unwind` sehingga panic dari kode generated tidak melintasi batas FFI.
+- **Fix:** Ini kode generated; mitigasi dilakukan lewat wrapper `catch_unwind`. Perbaikan permanen perlu upstream flutter_rust_bridge.
   1. **Immediate:** Wrap all API calls with catch_unwind (see Critical Issue #1)
   2. **Long-term:** File issue with flutter_rust_bridge to use `from_utf8_lossy` or return Result
 
@@ -117,6 +119,8 @@ pub fn cancel_copy() {
   ```
 - **Panic / abort / silent-failure risk:** HIGH
 - **Severity:** HIGH
+- **Status:** MITIGATED
+- **Resolution:** Wrapper `catch_unwind` pada API publik mencegah panic melewati FFI. Perlu upstream untuk perbaikan permanen.
 - **Fix:** Generated code - upstream issue required. Immediate mitigation with catch_unwind wrapper on all API functions.
 
 ---
