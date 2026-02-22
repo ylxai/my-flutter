@@ -83,9 +83,23 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final bDate = b.modifiedDate ?? DateTime(1970);
         return bDate.compareTo(aDate);
       });
+      if (!mounted) return;
       ref.read(_galleryFilesProvider.notifier).setFiles(files);
+    } catch (e) {
+      // ✅ FIX #4: Handle error agar loading state tidak stuck = true
+      // dan user mendapat feedback yang jelas jika scan gagal.
+      if (!mounted) return;
+      ref.read(_galleryFilesProvider.notifier).setFiles([]);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Scan failed: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
     } finally {
-      ref.read(_galleryLoadingProvider.notifier).setLoading(false);
+      if (mounted) {
+        ref.read(_galleryLoadingProvider.notifier).setLoading(false);
+      }
     }
   }
 

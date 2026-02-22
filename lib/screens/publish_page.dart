@@ -11,6 +11,7 @@ import '../providers/settings_provider.dart';
 import '../providers/upload_provider.dart';
 import '../providers/publish_history_provider.dart';
 import '../services/upload_orchestrator.dart';
+import '../constants/file_constants.dart';
 import '../theme/glass_colors.dart';
 import '../services/file_picker_adapter.dart';
 
@@ -484,20 +485,24 @@ class _PublishPageState extends ConsumerState<PublishPage> {
   }
 
   void _startPublish() {
+    // ✅ FIX #1: Baca settingsProvider sekali saja — konsisten, tidak bisa
+    // dapat state berbeda jika provider update di antara dua read.
     final settings = ref.read(settingsProvider);
+
+    // ✅ FIX #5: Gunakan kExtraImageExtensions dari file_constants.dart
+    // bukan hardcode 'png' — konsisten dengan centralized constants (P0-3).
     final extensions = {
       ...settings.rawExtensions,
       ...settings.jpgExtensions,
-      'png',
+      ...kExtraImageExtensions,
     }.map((e) => e.toLowerCase()).toList();
+
     final config = UploadConfig(
       eventName: _eventNameController.text,
       sourceFolder: _sourceFolder!,
       r2Account: _selectedR2Account,
       uploadOriginalToDrive: _uploadOriginals,
-      googleDriveCredentialsPath: ref
-          .read(settingsProvider)
-          .googleDriveCredentialsPath,
+      googleDriveCredentialsPath: settings.googleDriveCredentialsPath,
       recursiveScan: _scanRecursive,
       extensions: extensions,
     );
