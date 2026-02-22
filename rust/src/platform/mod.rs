@@ -20,9 +20,8 @@ pub fn copy_file_optimized(src: &Path, dst: &Path) -> io::Result<u64> {
 
     #[cfg(target_os = "linux")]
     {
-        match linux::copy_file_range_copy(src, dst) {
-            Ok(bytes) => return Ok(bytes),
-            Err(_) => {} // fallback below
+        if let Ok(bytes) = linux::copy_file_range_copy(src, dst) {
+            return Ok(bytes);
         }
     }
 

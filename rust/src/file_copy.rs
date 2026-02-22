@@ -7,11 +7,11 @@
 
 use memmap2::MmapOptions;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write, BufReader, BufWriter};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-use crate::platform;
 use crate::path_utils;
+use crate::platform;
 
 const SMALL_FILE_THRESHOLD: u64 = 10 * 1024 * 1024; // 10MB
 const LARGE_FILE_THRESHOLD: u64 = 1024 * 1024 * 1024; // 1GB
@@ -53,11 +53,7 @@ pub fn select_strategy(file_size: u64) -> CopyStrategy {
 }
 
 /// Copy a single file using the best strategy
-pub fn copy_file(
-    src: &Path,
-    dst: &Path,
-    skip_existing: bool,
-) -> io::Result<FileCopyResult> {
+pub fn copy_file(src: &Path, dst: &Path, skip_existing: bool) -> io::Result<FileCopyResult> {
     let start = std::time::Instant::now();
     let src = path_utils::canonicalize_path(src)?;
     let dst = path_utils::canonicalize_path_allow_missing(dst)?;
@@ -66,8 +62,8 @@ pub fn copy_file(
 
     // Smart copy: skip if file exists with same size
     if skip_existing && dst.exists() {
-        let src_meta = fs::metadata(src)?;
-        let dst_meta = fs::metadata(dst)?;
+        let src_meta = fs::metadata(&src)?;
+        let dst_meta = fs::metadata(&dst)?;
         if src_meta.len() == dst_meta.len() {
             return Ok(FileCopyResult {
                 source_path: src_str,
@@ -83,22 +79,18 @@ pub fn copy_file(
         }
     }
 
-    let src_meta = fs::metadata(src)?;
+    let src_meta = fs::metadata(&src)?;
     let file_size = src_meta.len();
     let strategy = select_strategy(file_size);
 
     let result = match strategy {
-        CopyStrategy::PlatformOptimized => {
-            platform::copy_file_optimized(src, dst)
-        }
-        CopyStrategy::Buffered => {
-            copy_buffered(src, dst)
-        }
+        CopyStrategy::PlatformOptimized => platform::copy_file_optimized(&src, &dst),
+        CopyStrategy::Buffered => copy_buffered(&src, &dst),
         CopyStrategy::MemoryMapped => {
-            copy_memory_mapped(src, dst).or_else(|_| copy_buffered(src, dst))
+            copy_memory_mapped(&src, &dst).or_else(|_| copy_buffered(&src, &dst))
         }
         CopyStrategy::ChunkedMemoryMapped => {
-            copy_chunked_mmap(src, dst).or_else(|_| copy_buffered(src, dst))
+            copy_chunked_mmap(&src, &dst).or_else(|_| copy_buffered(&src, &dst))
         }
     };
 
@@ -145,8 +137,8 @@ fn copy_buffered(src: &Path, dst: &Path) -> io::Result<u64> {
         fs::create_dir_all(parent)?;
     }
 
-    let src_file = File::open(&src)?;
-    let dst_file = File::create(&dst)?;
+    let src_file = File::open(src)?;
+    let dst_file = File::create(dst)?;
 
     let mut reader = BufReader::with_capacity(BUFFER_SIZE, src_file);
     let mut writer = BufWriter::with_capacity(BUFFER_SIZE, dst_file);
@@ -172,25 +164,25 @@ fn copy_memory_mapped(src: &Path, dst: &Path) -> io::Result<u64> {
         fs::create_dir_all(parent)?;
     }
 
-    let src_file = File::open(&src)?;
+    let src_file = File::open(src)?;
     let src_meta = src_file.metadata()?;
     let file_size = src_meta.len();
 
     if file_size == 0 {
-        File::create(&dst)?;
+        File::create(dst)?;
         return Ok(0);
     }
 
-    let mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        unsafe { MmapOptions::new().map(&src_file) }
+    let mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        MmapOptions::new().map(&src_file)
     }))
-    .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))??;
+    .map_err(|_| io::Error::other("Panic during memory map"))??;
 
     let dst_file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
-        .open(&dst)?;
+        .open(dst)?;
 
     dst_file.set_len(file_size)?;
 
@@ -207,44 +199,40 @@ fn copy_chunked_mmap(src: &Path, dst: &Path) -> io::Result<u64> {
         fs::create_dir_all(parent)?;
     }
 
-    let src_file = File::open(&src)?;
+    let src_file = File::open(src)?;
     let src_meta = src_file.metadata()?;
     let file_size = src_meta.len();
 
     if file_size == 0 {
-        File::create(&dst)?;
+        File::create(dst)?;
         return Ok(0);
     }
 
     // Pre-allocate destination
-    platform::preallocate_file(&dst, file_size)?;
+    platform::preallocate_file(dst, file_size)?;
 
-    let dst_file = OpenOptions::new().write(true).open(&dst)?;
+    let dst_file = OpenOptions::new().write(true).open(dst)?;
 
     let mut offset: u64 = 0;
     while offset < file_size {
         let remaining = file_size - offset;
         let chunk_len = std::cmp::min(remaining as usize, MMAP_CHUNK_SIZE);
 
-        let src_mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            unsafe {
-                MmapOptions::new()
-                    .offset(offset)
-                    .len(chunk_len)
-                    .map(&src_file)
-            }
+        let src_mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            MmapOptions::new()
+                .offset(offset)
+                .len(chunk_len)
+                .map(&src_file)
         }))
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))??;
+        .map_err(|_| io::Error::other("Panic during memory map"))??;
 
-        let mut dst_mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            unsafe {
-                MmapOptions::new()
-                    .offset(offset)
-                    .len(chunk_len)
-                    .map_mut(&dst_file)
-            }
+        let mut dst_mmap = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            MmapOptions::new()
+                .offset(offset)
+                .len(chunk_len)
+                .map_mut(&dst_file)
         }))
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Panic during memory map"))??;
+        .map_err(|_| io::Error::other("Panic during memory map"))??;
 
         dst_mmap.copy_from_slice(&src_mmap);
         dst_mmap.flush()?;
