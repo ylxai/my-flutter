@@ -49,16 +49,21 @@ jobs:
           key: ubuntu-cargo-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: ubuntu-cargo-
 
-      - name: Cache flutter_rust_bridge_codegen binary
+      - name: Cache flutter_rust_bridge_codegen + cargo-expand binaries
         id: cache-frb
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/flutter_rust_bridge_codegen
-          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}
+          path: |
+            ~/.cargo/bin/flutter_rust_bridge_codegen
+            ~/.cargo/bin/cargo-expand
+          # Bump cache key jika salah satu versi berubah
+          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
 
-      - name: Install flutter_rust_bridge_codegen
+      - name: Install flutter_rust_bridge_codegen + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'
-        run: cargo install flutter_rust_bridge_codegen@${{ env.FRB_CODEGEN_VERSION }} --locked
+        run: |
+          cargo install flutter_rust_bridge_codegen@${{ env.FRB_CODEGEN_VERSION }} --locked
+          cargo install cargo-expand --locked
 
       # ── Flutter Setup ─────────────────────────────────────────────────────
       - name: Setup Flutter
@@ -141,16 +146,20 @@ jobs:
           key: ubuntu-cargo-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: ubuntu-cargo-
 
-      - name: Cache flutter_rust_bridge_codegen binary
+      - name: Cache flutter_rust_bridge_codegen + cargo-expand binaries
         id: cache-frb
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/flutter_rust_bridge_codegen
-          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}
+          path: |
+            ~/.cargo/bin/flutter_rust_bridge_codegen
+            ~/.cargo/bin/cargo-expand
+          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
 
-      - name: Install flutter_rust_bridge_codegen
+      - name: Install flutter_rust_bridge_codegen + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'
-        run: cargo install flutter_rust_bridge_codegen@${{ env.FRB_CODEGEN_VERSION }} --locked
+        run: |
+          cargo install flutter_rust_bridge_codegen@${{ env.FRB_CODEGEN_VERSION }} --locked
+          cargo install cargo-expand --locked
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -214,16 +223,20 @@ jobs:
           key: windows-cargo-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: windows-cargo-
 
-      - name: Cache flutter_rust_bridge_codegen binary
+      - name: Cache flutter_rust_bridge_codegen + cargo-expand binaries
         id: cache-frb
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/bin/flutter_rust_bridge_codegen.exe
-          key: windows-frb-${{ env.FRB_CODEGEN_VERSION }}
+          path: |
+            ~/.cargo/bin/flutter_rust_bridge_codegen.exe
+            ~/.cargo/bin/cargo-expand.exe
+          key: windows-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
 
-      - name: Install flutter_rust_bridge_codegen
+      - name: Install flutter_rust_bridge_codegen + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'
-        run: cargo install flutter_rust_bridge_codegen@${{ env.FRB_CODEGEN_VERSION }} --locked
+        run: |
+          cargo install flutter_rust_bridge_codegen@${{ env.FRB_CODEGEN_VERSION }} --locked
+          cargo install cargo-expand --locked
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
