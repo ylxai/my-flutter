@@ -64,11 +64,12 @@ class PublishRecord {
 }
 
 /// Publish history state notifier
-class PublishHistoryNotifier extends StateNotifier<List<PublishRecord>> {
-  bool _isDisposed = false;
+class PublishHistoryNotifier extends Notifier<List<PublishRecord>> {
 
-  PublishHistoryNotifier() : super([]) {
+  @override
+  List<PublishRecord> build() {
     _load();
+    return [];
   }
 
   static const _key = 'publish_history';
@@ -84,12 +85,10 @@ class PublishHistoryNotifier extends StateNotifier<List<PublishRecord>> {
               .map((e) => PublishRecord.fromJson(e as Map<String, dynamic>))
               .toList()
             ..sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
-      if (_isDisposed) return;
       state = records.take(_maxRecords).toList();
     } catch (e) {
       debugPrint('Failed to parse publish history: $e');
       await prefs.remove(_key);
-      if (_isDisposed) return;
       state = [];
     }
   }
@@ -120,14 +119,9 @@ class PublishHistoryNotifier extends StateNotifier<List<PublishRecord>> {
     _save();
   }
 
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
-  }
 }
 
 final publishHistoryProvider =
-    StateNotifierProvider<PublishHistoryNotifier, List<PublishRecord>>((ref) {
-      return PublishHistoryNotifier();
-    });
+    NotifierProvider<PublishHistoryNotifier, List<PublishRecord>>(
+      PublishHistoryNotifier.new,
+    );

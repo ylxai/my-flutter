@@ -73,20 +73,17 @@ class SettingsState {
 }
 
 /// Settings state notifier with persistence
-class SettingsNotifier extends StateNotifier<SettingsState> {
+class SettingsNotifier extends Notifier<SettingsState> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  bool _isDisposed = false;
 
-  SettingsNotifier({SettingsState? initialState, bool loadFromPrefs = true})
-    : super(initialState ?? const SettingsState()) {
-    if (loadFromPrefs) {
-      _load();
-    }
+  @override
+  SettingsState build() {
+    _load();
+    return const SettingsState();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    if (_isDisposed) return;
     final themeName = prefs.getString('themeMode') ?? 'dark';
     final skip = prefs.getBool('skipExistingFiles') ?? true;
     final modeName = prefs.getString('copyMode') ?? 'ultraFast';
@@ -119,7 +116,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
           .map((e) => R2Account.fromJson(e as Map<String, dynamic>))
           .toList();
       final hydrated = await _hydrateR2Accounts(accounts);
-      if (_isDisposed) return;
       state = state.copyWith(r2Accounts: hydrated);
       await _storeR2AccountsMetadata(prefs, hydrated);
     } catch (e) {
@@ -132,12 +128,6 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     if (gdrivePath != null && gdrivePath.isNotEmpty) {
       state = state.copyWith(googleDriveCredentialsPath: gdrivePath);
     }
-  }
-
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
   }
 
   Future<void> _save() async {
@@ -302,8 +292,5 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   String _r2SecretKeyKey(String id) => 'r2_secret_key_$id';
 }
 
-final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsState>(
-  (ref) {
-    return SettingsNotifier();
-  },
-);
+final settingsProvider =
+    NotifierProvider<SettingsNotifier, SettingsState>(SettingsNotifier.new);

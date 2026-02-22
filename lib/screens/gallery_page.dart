@@ -8,9 +8,29 @@ import '../providers/copy_provider.dart';
 import '../models/file_item.dart';
 
 /// Gallery page state
-final _galleryFilesProvider = StateProvider<List<FileItem>>((ref) => []);
+final _galleryFilesProvider =
+    NotifierProvider<_GalleryFilesNotifier, List<FileItem>>(
+      _GalleryFilesNotifier.new,
+    );
 
-final _galleryLoadingProvider = StateProvider<bool>((ref) => false);
+final _galleryLoadingProvider =
+    NotifierProvider<_GalleryLoadingNotifier, bool>(
+      _GalleryLoadingNotifier.new,
+    );
+
+class _GalleryFilesNotifier extends Notifier<List<FileItem>> {
+  @override
+  List<FileItem> build() => [];
+
+  void setFiles(List<FileItem> files) => state = files;
+}
+
+class _GalleryLoadingNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void setLoading(bool value) => state = value;
+}
 
 /// Gallery page — image grid browser
 class GalleryPage extends ConsumerStatefulWidget {
@@ -54,7 +74,7 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
   }
 
   Future<void> _scanFolder(String path) async {
-    ref.read(_galleryLoadingProvider.notifier).state = true;
+    ref.read(_galleryLoadingProvider.notifier).setLoading(true);
     try {
       final service = ref.read(fileOperationServiceProvider);
       final files = await service.scanFolder(path);
@@ -64,9 +84,9 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
         final bDate = b.modifiedDate ?? DateTime(1970);
         return bDate.compareTo(aDate);
       });
-      ref.read(_galleryFilesProvider.notifier).state = files;
+      ref.read(_galleryFilesProvider.notifier).setFiles(files);
     } finally {
-      ref.read(_galleryLoadingProvider.notifier).state = false;
+      ref.read(_galleryLoadingProvider.notifier).setLoading(false);
     }
   }
 
@@ -308,7 +328,7 @@ class _GalleryTile extends StatelessWidget {
         width: double.infinity,
         height: double.infinity,
         cacheWidth: 200,
-        errorBuilder: (_, __, ___) => Center(
+        errorBuilder: (context, error, stackTrace) => Center(
           child: Icon(
             Icons.image_rounded,
             size: 28,

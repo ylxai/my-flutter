@@ -21,6 +21,15 @@ import 'package:filecopy_utility/services/r2_upload_service.dart';
 import 'package:filecopy_utility/services/upload_orchestrator.dart';
 import 'package:filecopy_utility/screens/main_screen.dart';
 
+class TestSettingsNotifier extends SettingsNotifier {
+  TestSettingsNotifier(this._initial);
+
+  final SettingsState _initial;
+
+  @override
+  SettingsState build() => _initial;
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -48,8 +57,8 @@ void main() {
       ]),
     );
 
-    final settings = SettingsNotifier(
-      initialState: const SettingsState(
+    final settings = TestSettingsNotifier(
+      const SettingsState(
         r2Accounts: [
           R2Account(
             id: 'test',
@@ -61,14 +70,15 @@ void main() {
           ),
         ],
       ),
-      loadFromPrefs: false,
     );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           filePickerProvider.overrideWithValue(filePicker),
-          settingsProvider.overrideWith((ref) => settings),
+          settingsProvider.overrideWith(
+            () => settings,
+          ),
           r2ServiceProvider.overrideWithValue(FakeR2UploadService()),
           driveServiceProvider.overrideWithValue(FakeDriveUploadService()),
           uploadOrchestratorFactoryProvider.overrideWithValue(
@@ -148,8 +158,8 @@ void main() {
       fileQueue: Queue<FilePickerResult?>(),
     );
 
-    final settings = SettingsNotifier(
-      initialState: const SettingsState(
+    final settings = TestSettingsNotifier(
+      const SettingsState(
         r2Accounts: [
           R2Account(
             id: 'test',
@@ -161,14 +171,15 @@ void main() {
           ),
         ],
       ),
-      loadFromPrefs: false,
     );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           filePickerProvider.overrideWithValue(filePicker),
-          settingsProvider.overrideWith((ref) => settings),
+          settingsProvider.overrideWith(
+            () => settings,
+          ),
           r2ServiceProvider.overrideWithValue(FakeR2UploadService()),
           driveServiceProvider.overrideWithValue(FakeDriveUploadService()),
           uploadOrchestratorFactoryProvider.overrideWithValue(
@@ -217,14 +228,15 @@ void main() {
   });
 
   testWidgets('Navigation + settings buttons', (tester) async {
-    final settings = SettingsNotifier(
-      initialState: const SettingsState(),
-      loadFromPrefs: false,
-    );
+    final settings = TestSettingsNotifier(const SettingsState());
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [settingsProvider.overrideWith((ref) => settings)],
+        overrides: [
+          settingsProvider.overrideWith(
+            () => settings,
+          ),
+        ],
         child: const FileCopyApp(),
       ),
     );

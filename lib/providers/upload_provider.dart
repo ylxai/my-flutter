@@ -63,24 +63,20 @@ class UploadState {
 }
 
 /// Upload state notifier
-class UploadNotifier extends StateNotifier<UploadState> {
-  final R2UploadService _r2Service;
-  final GoogleDriveUploadService _driveService;
-  final PublishHistoryNotifier _historyNotifier;
-  final UploadOrchestratorFactory _orchestratorFactory;
+class UploadNotifier extends Notifier<UploadState> {
+  late R2UploadService _r2Service;
+  late GoogleDriveUploadService _driveService;
+  late UploadOrchestratorFactory _orchestratorFactory;
   UploadOrchestrator? _orchestrator;
   static const _maxLogs = 300;
 
-  UploadNotifier({
-    required R2UploadService r2Service,
-    required GoogleDriveUploadService driveService,
-    required PublishHistoryNotifier historyNotifier,
-    required UploadOrchestratorFactory orchestratorFactory,
-  }) : _r2Service = r2Service,
-       _driveService = driveService,
-       _historyNotifier = historyNotifier,
-       _orchestratorFactory = orchestratorFactory,
-       super(const UploadState());
+  @override
+  UploadState build() {
+    _r2Service = ref.watch(r2ServiceProvider);
+    _driveService = ref.watch(driveServiceProvider);
+    _orchestratorFactory = ref.watch(uploadOrchestratorFactoryProvider);
+    return const UploadState();
+  }
 
   void _addLog(String message, {LogLevel level = LogLevel.info}) {
     final entry = LogEntry(
@@ -229,7 +225,7 @@ class UploadNotifier extends StateNotifier<UploadState> {
     required bool isSuccess,
     UploadProgress? progress,
   }) {
-    _historyNotifier.addRecord(
+    ref.read(publishHistoryProvider.notifier).addRecord(
       PublishRecord(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         eventName: config.eventName,
@@ -277,16 +273,8 @@ final uploadOrchestratorFactoryProvider = Provider<UploadOrchestratorFactory>((
   };
 });
 
-final uploadProvider = StateNotifierProvider<UploadNotifier, UploadState>((
-  ref,
-) {
-  return UploadNotifier(
-    r2Service: ref.watch(r2ServiceProvider),
-    driveService: ref.watch(driveServiceProvider),
-    historyNotifier: ref.watch(publishHistoryProvider.notifier),
-    orchestratorFactory: ref.watch(uploadOrchestratorFactoryProvider),
-  );
-});
+final uploadProvider =
+    NotifierProvider<UploadNotifier, UploadState>(UploadNotifier.new);
 typedef UploadOrchestratorFactory =
     UploadOrchestrator Function({
       required R2UploadService r2Service,

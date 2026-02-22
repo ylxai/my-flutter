@@ -69,10 +69,14 @@ class CopyState {
   }
 }
 
-class CopyNotifier extends StateNotifier<CopyState> {
-  final FileOperationService _fileService;
+class CopyNotifier extends Notifier<CopyState> {
+  late FileOperationService _fileService;
 
-  CopyNotifier(this._fileService) : super(const CopyState());
+  @override
+  CopyState build() {
+    _fileService = ref.watch(fileOperationServiceProvider);
+    return const CopyState();
+  }
 
   void setSourceFolder(String path) {
     state = state.copyWith(sourceFolder: path, status: CopyStatus.idle);
@@ -176,10 +180,7 @@ class CopyNotifier extends StateNotifier<CopyState> {
   }
 }
 
-final copyProvider = StateNotifierProvider<CopyNotifier, CopyState>((ref) {
-  final service = ref.watch(fileOperationServiceProvider);
-  return CopyNotifier(service);
-});
+final copyProvider = NotifierProvider<CopyNotifier, CopyState>(CopyNotifier.new);
 
 // ── Dashboard Stats ──
 

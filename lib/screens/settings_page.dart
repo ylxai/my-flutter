@@ -430,18 +430,18 @@ class SettingsPage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: Theme.of(context).textTheme.bodyLarge),
-                if (subtitle != null)
+                if (subtitle case final text?)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      subtitle,
+                      text,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
               ],
             ),
           ),
-          if (trailing != null) trailing,
+          if (trailing != null) ...[trailing],
         ],
       ),
     );
