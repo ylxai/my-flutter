@@ -8,8 +8,21 @@ import '../services/file_operation_service.dart';
 
 // ── Services ──
 
+/// Provider untuk [FileOperationService].
+///
+/// Menggunakan [ref.watch] agar provider ini otomatis rebuild dan membuat
+/// instance [FileOperationService] baru ketika settings (parallelism / copyMode)
+/// berubah di [settingsProvider].
+///
+/// CATATAN: [FileOperationService] tidak boleh di-share antar operasi copy
+/// yang berjalan bersamaan karena menyimpan state pause/cancel. Provider ini
+/// selalu membuat instance baru saat settings berubah, yang sudah aman.
 final fileOperationServiceProvider = Provider<FileOperationService>((ref) {
   final settings = ref.watch(settingsProvider);
+
+  // Guard: jika settings belum selesai load (masih default), tetap gunakan
+  // nilai yang ada — tidak perlu throw karena PerformanceSettings sudah
+  // punya default value yang valid.
   final perf = PerformanceSettings(
     maxParallelism: settings.maxParallelism,
     mode: settings.copyMode,
@@ -115,7 +128,14 @@ class CopyNotifier extends Notifier<CopyState> {
     if (state.validFiles.isEmpty) return;
 
     final destFolder = destinationFolder ?? state.sourceFolder;
+    final startTime = DateTime.now();
     state = state.copyWith(status: CopyStatus.copying);
+
+    // Kumpulkan tracking per-file selama proses copy berlangsung.
+    // Kita track nama file yang sudah diproses untuk bisa membagi
+    // validFiles ke successfulFiles vs skippedFiles vs failedFiles.
+    final skippedNames = <String>{};
+    final failedNames = <String>{};
 
     try {
       final stream = _fileService.copyFiles(
@@ -129,6 +149,22 @@ class CopyNotifier extends Notifier<CopyState> {
             ? CopyStatus.paused
             : CopyStatus.copying;
 
+        // Track file yang diproses untuk kategorisasi hasil akhir
+        final currentFile = progress.currentFileName;
+        if (currentFile.isNotEmpty &&
+            currentFile != '⏸ Paused' &&
+            currentFile != 'Cancelled') {
+          // Deteksi file yang di-skip: skippedCount naik tapi belum tercatat
+          if (progress.skippedCount > skippedNames.length) {
+            skippedNames.add(currentFile);
+          }
+
+          // Deteksi file yang gagal: failedCount naik tapi belum tercatat
+          if (progress.failedCount > failedNames.length) {
+            failedNames.add(currentFile);
+          }
+        }
+
         state = state.copyWith(progress: progress, status: currentStatus);
       }
 
@@ -139,15 +175,45 @@ class CopyNotifier extends Notifier<CopyState> {
       }
 
       final lastProgress = state.progress;
+      final endTime = DateTime.now();
+
+      // ✅ FIX P0-2: Isi successfulFiles, failedFiles, skippedFiles
+      // dengan benar berdasarkan tracking selama proses copy.
+      final allFiles = state.validFiles;
+
+      final failedFiles = allFiles
+          .where((f) => failedNames.contains(f.name))
+          .map(
+            (f) => FailedFileItem(
+              file: f,
+              error: 'Copy failed — lihat log untuk detail',
+            ),
+          )
+          .toList();
+
+      final skippedFiles = allFiles
+          .where((f) => skippedNames.contains(f.name))
+          .toList();
+
+      final successfulFiles = allFiles
+          .where(
+            (f) =>
+                !failedNames.contains(f.name) &&
+                !skippedNames.contains(f.name),
+          )
+          .toList();
+
       state = state.copyWith(
         status: CopyStatus.completed,
         result: CopyResult(
-          startTime: DateTime.now().subtract(
-            lastProgress?.elapsed ?? Duration.zero,
-          ),
-          endTime: DateTime.now(),
+          startTime: startTime,
+          endTime: endTime,
           averageSpeedMBps: lastProgress?.speedMBps ?? 0,
           totalBytesTransferred: lastProgress?.bytesCopied ?? 0,
+          successfulFiles: successfulFiles,
+          failedFiles: failedFiles,
+          skippedFiles: skippedFiles,
+          cancelled: false,
         ),
       );
     } catch (e) {

@@ -12,15 +12,18 @@
   - Fix: Diganti dengan `_AtomicWorkQueue` (index-based, atomic dequeue) dan `_SafeCounter` (atomic increment)
   - `dart analyze` → No issues found
 
-- [ ] **P0-2** — `fileOperationServiceProvider` pakai `read` bukan `watch` di `copy_provider.dart`
-  - Perubahan state tidak terpantau, UI tidak update
-  - Fix: Ganti `ref.read` → `ref.watch` atau gunakan pola yang benar
+- [x] **P0-2** — `CopyResult` tidak mengisi `successfulFiles`, `failedFiles`, `skippedFiles` + provider tracking ✅ SELESAI
+  - `startTime` dihitung salah (`DateTime.now().subtract(elapsed)`) — sudah difix
+  - `successfulFiles`, `failedFiles`, `skippedFiles` selalu kosong meski copy selesai — sudah difix
+  - Tambah tracking `skippedNames` & `failedNames` per-file selama stream berlangsung
+  - Tambah dokumentasi provider `fileOperationServiceProvider` agar intent jelas
+  - `dart analyze` → No issues found
 
 - [ ] **P0-3** — Ekstensi file terdefinisi di banyak tempat (duplikat konstanta)
   - Fix: Centralize ke 1 file konstanta (`lib/constants/file_constants.dart`)
 
-- [ ] **P0-4** — `CopyResult` tidak mengisi `successfulFiles` dan `failedFiles` dengan benar
-  - Fix: Pastikan setiap operasi copy mengisi field tersebut
+- [ ] **P0-4** — Directory scan tak terbatas tanpa max depth / max files / timeout
+  - Fix: Tambahkan batas scan yang aman
 
 ---
 
@@ -53,6 +56,7 @@
 ## ✅ Sudah Selesai
 
 - **P0-1** — Race condition parallel copy queue → `_AtomicWorkQueue` + `_SafeCounter`
+- **P0-2** — `CopyResult` field kosong + `startTime` salah hitung → tracking per-file + `startTime` direkam di awal
 
 ---
 
@@ -61,3 +65,4 @@
 | Tanggal | Item | Keterangan |
 |---------|------|------------|
 | 2026-02-22 | P0-1 | Fix race condition `ListQueue` → `_AtomicWorkQueue` + `_SafeCounter`, dart analyze clean |
+| 2026-02-22 | P0-2 | Fix `CopyResult` kosong, fix `startTime` salah, tambah tracking skipped/failed per-file, dart analyze clean |
