@@ -248,5 +248,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-release-${{ github.sha }}
-          path: build/windows/runner/Release/
+          # Flutter 3.x Windows build output ke x64/runner/Release/
+          path: build/windows/x64/runner/Release/
           retention-days: 7
