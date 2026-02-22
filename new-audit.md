@@ -356,32 +356,36 @@ let mut buf = [0u8; HASH_BUFFER_SIZE];
 - **Issue:** Windows implementation just calls `fs::copy` - no mmap or platform-specific optimization
 - **Evidence:** `fs::copy(src, dst)` - standard library copy
 - **Severity:** LOW (Performance)
-- **Fix:** Implement optimized Windows copy using Win32 API:
+- **Status:** FIXED
+- **Resolution:** Implementasi Windows sekarang memakai `CopyFileExW` untuk copy yang lebih efisien.
+- **Fix (implemented):**
 ```rust
-use windows::Win32::Storage::FileSystem::{
-    CopyFileExW, PROGRESS_CANCEL, COPY_FILE_FLAGS
-};
-
 pub fn copy_file_win32(src: &Path, dst: &Path) -> io::Result<u64> {
-    let src_wide: Vec<u16> = src.as_os_str().encode_wide().chain(Some(0)).collect();
-    let dst_wide: Vec<u16> = dst.as_os_str().encode_wide().chain(Some(0)).collect();
-    
+    let src_wide: Vec<u16> = OsStr::new(src)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let dst_wide: Vec<u16> = OsStr::new(dst)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+
     unsafe {
         let success = CopyFileExW(
             PCWSTR(src_wide.as_ptr()),
             PCWSTR(dst_wide.as_ptr()),
-            None,  // progress callback
-            None,  // callback data
-            None,  // cancel flag
-            COPY_FILE_FLAGS(0),
+            None,
+            None,
+            None,
+            windows::Win32::Storage::FileSystem::COPY_FILE_FLAGS(0),
         );
-        
+
         if !success.as_bool() {
             return Err(io::Error::last_os_error());
         }
     }
-    
-    fs::metadata(dst).map(|m| m.len())
+
+    fs::metadata(dst).map(|meta| meta.len())
 }
 ```
 
