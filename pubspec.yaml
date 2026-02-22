@@ -39,6 +39,8 @@ dependencies:
   # Cloud Upload (Hybrid Upload System)
   minio: ^3.5.8
   googleapis: ^16.0.0
+  # googleapis_auth 2.x tidak kompatibel dengan Flutter SDK saat ini (meta 1.17.0 vs ^1.18.1)
+  # Tetap di 1.6.0 hingga Flutter SDK diupdate dengan meta >=1.18.1
   googleapis_auth: ^1.6.0
   url_launcher: ^6.3.0
 
