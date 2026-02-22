@@ -143,8 +143,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_unit,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiCancelCopyConstMeta,
@@ -175,8 +175,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_native_hash_result,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_native_hash_result,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiComputeFileHashConstMeta,
@@ -213,8 +213,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_native_batch_result,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_native_batch_result,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiCopyFilesBatchConstMeta,
@@ -249,8 +249,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_native_file_copy_result,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_native_file_copy_result,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiCopySingleFileConstMeta,
@@ -278,8 +278,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_bool,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiIsCancelledConstMeta,
@@ -305,8 +305,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_bool,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiIsPausedConstMeta,
@@ -332,8 +332,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_unit,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiPauseCopyConstMeta,
@@ -372,8 +372,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_native_image_result,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_list_native_image_result,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiProcessImagesForUploadConstMeta,
@@ -416,8 +416,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_unit,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiResumeCopyConstMeta,
@@ -448,8 +448,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_native_file_entry,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_list_native_file_entry,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiScanDirectoryConstMeta,
@@ -484,8 +484,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             port: port_,
           );
         },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_bool,
+        codec: DcoCodec(
+          decodeSuccessData: dco_decode_bool,
           decodeErrorData: null,
         ),
         constMeta: kCrateApiVerifyFileIntegrityConstMeta,

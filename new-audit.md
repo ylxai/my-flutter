@@ -249,24 +249,24 @@ let dst = path_utils::canonicalize_path_allow_missing(dst)?;
 - **Location:** All FFI calls via SseCodec in `rust/src/frb_generated.rs`
 - **Detected language:** Rust/Dart
 - **Overhead source:** Entire batch result serialized to bytes, deserialized on Dart side
-- **Evidence:** `rust/src/frb_generated.rs` - all `Vec<NativeFileCopyResult>` serialized element-by-element
 - **Severity:** MEDIUM (Performance)
-- **Fix:** Use streaming results or DcoCodec:
+- **Status:** FIXED
+- **Resolution:** Codec default diganti ke `DcoCodec` di Rust boilerplate dan semua `NormalTask` Dart, mengurangi overhead serialisasi batch besar.
+- **Fix (implemented):**
 ```rust
-// Option 1: Use DcoCodec (more efficient)
+// rust/src/frb_generated.rs
 flutter_rust_bridge::frb_generated_boilerplate!(
     default_stream_sink_codec = DcoCodec,
     default_rust_opaque = RustOpaqueMoi,
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
-
-// Option 2: Stream results instead of batching
-pub fn copy_files_stream(
-    files: Vec<NativeFileEntry>,
-    // ... params
-) -> impl Stream<Item = NativeFileCopyResult> {
-    // Use StreamSink from flutter_rust_bridge
-}
+```
+```dart
+// lib/src/rust/frb_generated.dart
+codec: DcoCodec(
+  decodeSuccessData: sse_decode_native_batch_result,
+  decodeErrorData: null,
+),
 ```
 
 ---

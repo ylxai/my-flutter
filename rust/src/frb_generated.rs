@@ -32,7 +32,7 @@ use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, WriteBytesExt,
 // Section: boilerplate
 
 flutter_rust_bridge::frb_generated_boilerplate!(
-                    default_stream_sink_codec = SseCodec,
+                    default_stream_sink_codec = DcoCodec,
                     default_rust_opaque = RustOpaqueMoi,
                     default_rust_auto_opaque = RustAutoOpaqueMoi,
                 );
