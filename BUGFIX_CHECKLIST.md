@@ -59,14 +59,23 @@
 
 ## 🟡 P2 — PENINGKATAN (Selesaikan sebelum release)
 
-- [ ] **P2-1** — `main_screen.dart` terlalu besar, logika UI campur bisnis
-  - Fix: Refactor ke controller terpisah
+- [x] **P2-1** — `main_screen.dart` terlalu besar, logika UI campur bisnis ✅ SELESAI
+  - Buat `lib/controllers/copy_controller.dart` — pisahkan semua business logic
+  - `CopyController`: selectSourceFolder, importFile, pasteFromClipboard, scanFolder,
+    validateFiles, startCopy, togglePause, cancelCopy, handleDrop
+  - `_handleDrop` pakai `kScanExtensions` dari `file_constants.dart` — tidak hardcoded lagi
+  - `main_screen.dart` actions tinggal 1 baris delegate ke controller
+  - Tambah `if (!mounted) return` di `_addLog` — mencegah setState setelah dispose
+  - `dart analyze` → No issues found
 
-- [ ] **P2-2** — Duplikasi `process_image` vs `process_batch` di Rust
-  - Fix: Deduplikasi, gunakan satu fungsi generik
+- [x] **P2-2** — Duplikasi logika decode di `process_image` vs `process_batch` (Rust) ✅ SELESAI
+  - Ekstrak fungsi `decode_image()` terpusat di `image_processing.rs`
+  - `process_image()` dan `process_batch()` keduanya pakai `decode_image()`
+  - Hapus ~30 baris kode duplikat
+  - Fix pre-existing Rust error: use of moved value di `copy_single_file` dan `compute_file_hash`
+  - `cargo check` → Finished (hanya 1 warning unused import, bukan error)
 
-- [ ] **P2-3** — Directory scan tak terbatas (tanpa max depth / max files / timeout)
-  - Fix: Tambahkan batas scan yang aman
+- [x] **P2-3** — Directory scan tak terbatas ✅ SELESAI (dikerjakan di P0-4)
 
 ---
 
@@ -79,6 +88,9 @@
 - **P1-1** — Upload abort on error → continue-on-error R2 + Drive, manifest hanya file sukses
 - **P1-2** — Drive query injection → escape `'` dan `\` sebelum query
 - **P1-3** — Settings race condition → `_isLoaded` flag + `settingsLoadedProvider` + try/catch/finally
+- **P2-1** — `main_screen.dart` → `CopyController` controller terpisah + `kScanExtensions`
+- **P2-2** — Duplikat decode Rust → `decode_image()` terpusat + fix pre-existing moved value errors
+- **P2-3** — Scan tak terbatas → selesai di P0-4
 
 ---
 
@@ -93,3 +105,6 @@
 | 2026-02-22 | P1-1 | Continue-on-error R2 + Drive, manifest dari successfulFiles, successCount/failedCount akurat |
 | 2026-02-22 | P1-2 | Sanitasi nama folder Drive: escape single-quote dan backslash sebelum query |
 | 2026-02-22 | P1-3 | Tambah `_isLoaded` flag, `settingsLoadedProvider`, wrap `_load()` dengan try/catch/finally |
+| 2026-02-22 | P2-1 | Buat CopyController, pisahkan business logic dari main_screen.dart, pakai kScanExtensions |
+| 2026-02-22 | P2-2 | Ekstrak decode_image() terpusat di Rust, fix pre-existing moved value errors di api.rs |
+| 2026-02-22 | P2-3 | Sudah diselesaikan di P0-4 |
