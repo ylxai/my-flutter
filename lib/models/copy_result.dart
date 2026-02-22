@@ -58,6 +58,11 @@ class CopyProgress {
   final int totalFiles;
   final int processedFiles;
   final String currentFileName;
+
+  /// Path lengkap file yang sedang diproses — digunakan untuk tracking
+  /// per-file berdasarkan path identity (bukan nama) agar tidak collision
+  /// ketika ada dua file dengan nama sama di folder berbeda.
+  final String currentFilePath;
   final int bytesCopied;
   final int totalBytes;
   final double speedMBps;
@@ -69,6 +74,7 @@ class CopyProgress {
     this.totalFiles = 0,
     this.processedFiles = 0,
     this.currentFileName = '',
+    this.currentFilePath = '',
     this.bytesCopied = 0,
     this.totalBytes = 0,
     this.speedMBps = 0,
@@ -97,7 +103,7 @@ class CopyProgress {
 
   String get etaDisplay {
     final eta = estimatedTimeRemaining;
-    if (eta == Duration.zero) return 'Menghitung...';
+    if (eta == Duration.zero) return 'Calculating...';
     final m = eta.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = eta.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s remaining';

@@ -1,15 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 
 import '../theme/glass_colors.dart';
 import '../widgets/glass_widgets.dart';
 import '../providers/copy_provider.dart';
 import '../models/file_item.dart';
-import '../services/file_picker_adapter.dart';
+import '../controllers/copy_controller.dart';
 import 'gallery_page.dart';
 import 'publish_page.dart';
 import 'settings_page.dart';
@@ -29,6 +27,18 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   final List<String> _statusLogs = [];
   bool _isDragging = false;
 
+  /// Controller yang memisahkan business logic dari UI.
+  /// Di-lazy init setelah widget pertama kali build karena butuh [ref].
+  late final CopyController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ FIX reviewer: CopyController tidak menyimpan ref sebagai field.
+    // ref di-pass per method call dari widget scope agar selalu fresh.
+    _controller = CopyController(addLog: _addLog);
+  }
+
   @override
   void dispose() {
     _fileListController.dispose();
@@ -37,6 +47,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   void _addLog(String message) {
+    if (!mounted) return;
     setState(() {
       _statusLogs.add(
         '[${DateTime.now().toString().substring(11, 19)}] $message',
@@ -922,206 +933,62 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   // ═══════════════════════════════════════
-  // ACTIONS
+  // ACTIONS — delegate ke CopyController
   // ═══════════════════════════════════════
 
   Future<void> _selectSourceFolder() async {
-    final picker = ref.read(filePickerProvider);
-    final result = await picker.getDirectoryPath(
-      dialogTitle: 'Select Source Folder',
-    );
-    if (result != null) {
-      ref.read(copyProvider.notifier).setSourceFolder(result);
-      _addLog('📂 Source: $result');
-    }
+    await _controller.selectSourceFolder(ref);
   }
 
   Future<void> _importFile() async {
-    final picker = ref.read(filePickerProvider);
-    final result = await picker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['txt', 'csv'],
-    );
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      final content = await file.readAsString();
+    final content = await _controller.importFile(ref);
+    if (content != null) {
       _fileListController.text = content;
-      final names = content
-          .split('\n')
-          .where((l) => l.trim().isNotEmpty)
-          .map((l) => l.trim())
-          .toList();
-      ref.read(copyProvider.notifier).setFileNames(names);
       setState(() {});
-      _addLog('📄 Imported ${names.length} file names');
     }
   }
 
   Future<void> _pasteFromClipboard() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null) {
-      _fileListController.text = data!.text!;
-      final names = data.text!
-          .split('\n')
-          .where((l) => l.trim().isNotEmpty)
-          .map((l) => l.trim())
-          .toList();
-      ref.read(copyProvider.notifier).setFileNames(names);
+    final content = await _controller.pasteFromClipboard(ref);
+    if (content != null) {
+      _fileListController.text = content;
       setState(() {});
-      _addLog('📋 Pasted ${names.length} names');
     }
   }
 
   Future<void> _scanFolder(CopyState copyState) async {
-    if (copyState.sourceFolder.isEmpty) {
-      _addLog('⚠️ Select a source folder first');
-      return;
+    final names = await _controller.scanFolder(ref, copyState.sourceFolder);
+    if (names != null) {
+      _fileListController.text = names.join('\n');
+      setState(() {});
     }
-    _addLog('🔍 Scanning...');
-    final service = ref.read(fileOperationServiceProvider);
-    final files = await service.scanFolder(copyState.sourceFolder);
-    final names = files
-        .map((f) {
-          final name = f.name;
-          final dot = name.lastIndexOf('.');
-          return dot >= 0 ? name.substring(0, dot) : name;
-        })
-        .toSet()
-        .toList();
-    _fileListController.text = names.join('\n');
-    ref.read(copyProvider.notifier).setFileNames(names);
-    setState(() {});
-    _addLog('✅ Found ${files.length} files (${names.length} unique)');
   }
 
   Future<void> _validateFiles() async {
-    _addLog('🔍 Validating...');
-    await ref.read(copyProvider.notifier).validateFiles();
-    final state = ref.read(copyProvider);
-    _addLog(
-      '✅ ${state.validFiles.length} valid, '
-      '${state.invalidFiles.length} not found',
-    );
+    await _controller.validateFiles(ref);
   }
 
   Future<void> _startCopy() async {
-    _addLog('🚀 Starting copy...');
-    await ref.read(copyProvider.notifier).startCopy();
-    final state = ref.read(copyProvider);
-    if (state.status == CopyStatus.completed) {
-      _addLog('✅ Done! ${state.result?.performanceGrade ?? ""}');
-    } else if (state.status == CopyStatus.idle) {
-      _addLog('❌ Copy cancelled');
-    }
+    await _controller.startCopy(ref);
   }
 
   void _togglePause() {
-    final notifier = ref.read(copyProvider.notifier);
-    if (notifier.isPaused) {
-      notifier.resumeCopy();
-      _addLog('▶️ Resumed');
-    } else {
-      notifier.pauseCopy();
-      _addLog('⏸ Paused');
-    }
+    _controller.togglePause(ref);
   }
 
   void _cancelCopy() {
-    ref.read(copyProvider.notifier).cancelCopy();
-    _addLog('❌ Cancelled');
+    _controller.cancelCopy(ref);
   }
 
   Future<void> _handleDrop(DropDoneDetails details) async {
-    final files = details.files;
-    if (files.isEmpty) return;
-
-    final imageExtensions = {
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'raf',
-      'orf',
-      'rw2',
-      'dng',
-      'raw',
-      'pef',
-      'srw',
-      'jpg',
-      'jpeg',
-      'png',
-    };
-
-    for (final xFile in files) {
-      final path = xFile.path;
-      final entity = FileSystemEntity.typeSync(path);
-
-      if (entity == FileSystemEntityType.directory) {
-        // Dropped a folder → set as source
-        ref.read(copyProvider.notifier).setSourceFolder(path);
-        _addLog('📁 Source folder set: $path');
-        continue;
-      }
-
-      final ext = path.split('.').last.toLowerCase();
-
-      if (ext == 'txt') {
-        // Dropped a .txt file → parse lines as file names
-        try {
-          final contents = await File(path).readAsString();
-          final names = contents
-              .split('\n')
-              .map((l) => l.trim())
-              .where((l) => l.isNotEmpty)
-              .toList();
-
-          if (names.isNotEmpty) {
-            final existing = _fileListController.text;
-            final separator = existing.isNotEmpty && !existing.endsWith('\n')
-                ? '\n'
-                : '';
-            _fileListController.text = '$existing$separator${names.join('\n')}';
-            ref
-                .read(copyProvider.notifier)
-                .setFileNames(
-                  _fileListController.text
-                      .split('\n')
-                      .where((l) => l.trim().isNotEmpty)
-                      .map((l) => l.trim())
-                      .toList(),
-                );
-            _addLog('📄 Imported ${names.length} names from TXT');
-            setState(() {}); // update counter
-          }
-        } catch (e) {
-          _addLog('⚠️ Failed to read TXT: $e');
-        }
-        continue;
-      }
-
-      if (imageExtensions.contains(ext)) {
-        // Dropped image file → extract name without extension
-        final fileName = path.split(Platform.pathSeparator).last;
-        final nameWithoutExt = fileName.contains('.')
-            ? fileName.substring(0, fileName.lastIndexOf('.'))
-            : fileName;
-
-        final existing = _fileListController.text;
-        final separator = existing.isNotEmpty && !existing.endsWith('\n')
-            ? '\n'
-            : '';
-        _fileListController.text = '$existing$separator$nameWithoutExt';
-        _addLog('🖼️ Added: $nameWithoutExt');
-      }
+    final newContent = await _controller.handleDrop(
+      ref: ref,
+      details: details,
+      currentTextContent: _fileListController.text,
+    );
+    if (newContent != null) {
+      _fileListController.text = newContent;
+      setState(() {});
     }
-
-    // Sync file names to provider
-    final allNames = _fileListController.text
-        .split('\n')
-        .where((l) => l.trim().isNotEmpty)
-        .map((l) => l.trim())
-        .toList();
-    ref.read(copyProvider.notifier).setFileNames(allNames);
-    setState(() {});
   }
 }

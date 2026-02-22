@@ -81,8 +81,14 @@ class GoogleDriveUploadService {
   Future<String?> findFolder(String name) async {
     _ensureAuthenticated();
 
+    // ✅ FIX P1-2: Sanitasi nama folder sebelum dimasukkan ke query Drive API.
+    // Karakter single-quote (') dan backslash (\) harus di-escape agar tidak
+    // bisa memanipulasi query string (Drive API query injection).
+    // Drive API menggunakan escape sequence: \' untuk single-quote, \\ untuk backslash.
+    final safeName = name.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+
     final query =
-        "name='$name' and "
+        "name='$safeName' and "
         "mimeType='application/vnd.google-apps.folder' and "
         "trashed=false";
 

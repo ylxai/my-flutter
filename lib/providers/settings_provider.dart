@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/file_constants.dart';
 import '../models/cloud_account.dart';
 import '../models/performance_settings.dart';
 
@@ -22,20 +23,10 @@ class SettingsState {
 
   const SettingsState({
     this.themeMode = ThemeMode.dark,
-    this.rawExtensions = const [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'raf',
-      'orf',
-      'rw2',
-      'dng',
-      'raw',
-      'pef',
-      'srw',
-    ],
-    this.jpgExtensions = const ['jpg', 'jpeg'],
+    // ✅ FIX P0-3: Gunakan konstanta terpusat dari file_constants.dart
+    // sebagai single source of truth untuk ekstensi file.
+    this.rawExtensions = kRawExtensions,
+    this.jpgExtensions = kJpgExtensions,
     this.skipExistingFiles = true,
     this.duplicateHandling = DuplicateHandling.skip,
     this.copyMode = CopyMode.ultraFast,
@@ -76,57 +67,80 @@ class SettingsState {
 class SettingsNotifier extends Notifier<SettingsState> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
+  /// Flag apakah settings sudah selesai di-load dari persistent storage.
+  /// Provider lain dapat watch [settingsLoadedProvider] untuk menunggu
+  /// settings siap sebelum digunakan.
+  bool _isLoaded = false;
+  bool get isLoaded => _isLoaded;
+
   @override
   SettingsState build() {
+    // ✅ FIX P1-3: Fire-and-forget _load() di build() menyebabkan race condition
+    // — provider lain (misal fileOperationServiceProvider) bisa mengonsumsi
+    // SettingsState default sebelum _load() selesai.
+    //
+    // Solusi: _load() tetap async tapi kita expose flag [isLoaded] dan provider
+    // terpisah [settingsLoadedProvider] agar consumer bisa menunggu dengan benar.
+    // State default sudah valid (pakai konstanta dari file_constants.dart)
+    // sehingga app tetap bisa berjalan meski settings belum selesai load.
+    _isLoaded = false;
     _load();
     return const SettingsState();
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final themeName = prefs.getString('themeMode') ?? 'dark';
-    final skip = prefs.getBool('skipExistingFiles') ?? true;
-    final modeName = prefs.getString('copyMode') ?? 'ultraFast';
-    final parallelism = prefs.getInt('maxParallelism') ?? 4;
-    final duplicateName = prefs.getString('duplicateHandling') ?? 'skip';
-    final rawExt = prefs.getStringList('rawExtensions');
-    final jpgExt = prefs.getStringList('jpgExtensions');
-
-    state = state.copyWith(
-      themeMode: themeName == 'light' ? ThemeMode.light : ThemeMode.dark,
-      skipExistingFiles: skip,
-      copyMode: CopyMode.values.firstWhere(
-        (e) => e.name == modeName,
-        orElse: () => CopyMode.ultraFast,
-      ),
-      duplicateHandling: DuplicateHandling.values.firstWhere(
-        (e) => e.name == duplicateName,
-        orElse: () => DuplicateHandling.skip,
-      ),
-      maxParallelism: parallelism,
-      rawExtensions: rawExt ?? state.rawExtensions,
-      jpgExtensions: jpgExt ?? state.jpgExtensions,
-    );
-
-    // Load R2 accounts
-    final accountsJson = prefs.getString('r2Accounts') ?? '[]';
     try {
-      final list = jsonDecode(accountsJson) as List;
-      final accounts = list
-          .map((e) => R2Account.fromJson(e as Map<String, dynamic>))
-          .toList();
-      final hydrated = await _hydrateR2Accounts(accounts);
-      state = state.copyWith(r2Accounts: hydrated);
-      await _storeR2AccountsMetadata(prefs, hydrated);
-    } catch (e) {
-      debugPrint('Failed to parse R2 accounts: $e');
-      return;
-    }
+      final prefs = await SharedPreferences.getInstance();
+      final themeName = prefs.getString('themeMode') ?? 'dark';
+      final skip = prefs.getBool('skipExistingFiles') ?? true;
+      final modeName = prefs.getString('copyMode') ?? 'ultraFast';
+      final parallelism = prefs.getInt('maxParallelism') ?? 4;
+      final duplicateName = prefs.getString('duplicateHandling') ?? 'skip';
+      final rawExt = prefs.getStringList('rawExtensions');
+      final jpgExt = prefs.getStringList('jpgExtensions');
 
-    // Load GDrive credentials path
-    final gdrivePath = prefs.getString('googleDriveCredentialsPath');
-    if (gdrivePath != null && gdrivePath.isNotEmpty) {
-      state = state.copyWith(googleDriveCredentialsPath: gdrivePath);
+      state = state.copyWith(
+        themeMode: themeName == 'light' ? ThemeMode.light : ThemeMode.dark,
+        skipExistingFiles: skip,
+        copyMode: CopyMode.values.firstWhere(
+          (e) => e.name == modeName,
+          orElse: () => CopyMode.ultraFast,
+        ),
+        duplicateHandling: DuplicateHandling.values.firstWhere(
+          (e) => e.name == duplicateName,
+          orElse: () => DuplicateHandling.skip,
+        ),
+        maxParallelism: parallelism,
+        rawExtensions: rawExt ?? state.rawExtensions,
+        jpgExtensions: jpgExt ?? state.jpgExtensions,
+      );
+
+      // Load R2 accounts
+      final accountsJson = prefs.getString('r2Accounts') ?? '[]';
+      try {
+        final list = jsonDecode(accountsJson) as List;
+        final accounts = list
+            .map((e) => R2Account.fromJson(e as Map<String, dynamic>))
+            .toList();
+        final hydrated = await _hydrateR2Accounts(accounts);
+        state = state.copyWith(r2Accounts: hydrated);
+        await _storeR2AccountsMetadata(prefs, hydrated);
+      } catch (e) {
+        debugPrint('Failed to parse R2 accounts: $e');
+      }
+
+      // Load GDrive credentials path
+      final gdrivePath = prefs.getString('googleDriveCredentialsPath');
+      if (gdrivePath != null && gdrivePath.isNotEmpty) {
+        state = state.copyWith(googleDriveCredentialsPath: gdrivePath);
+      }
+    } catch (e) {
+      debugPrint('Failed to load settings: $e');
+    } finally {
+      // Tandai settings sudah selesai load — berhasil atau gagal.
+      // State akan di-update sehingga settingsLoadedProvider ikut rebuild.
+      _isLoaded = true;
+      state = state.copyWith();
     }
   }
 
@@ -295,3 +309,19 @@ class SettingsNotifier extends Notifier<SettingsState> {
 final settingsProvider = NotifierProvider<SettingsNotifier, SettingsState>(
   SettingsNotifier.new,
 );
+
+/// Provider yang mengembalikan `true` jika settings sudah selesai di-load
+/// dari persistent storage.
+///
+/// Gunakan ini di UI atau provider lain yang membutuhkan settings
+/// yang sudah ter-hydrate sebelum beroperasi:
+///
+/// ```dart
+/// final isReady = ref.watch(settingsLoadedProvider);
+/// if (!isReady) return const CircularProgressIndicator();
+/// ```
+final settingsLoadedProvider = Provider<bool>((ref) {
+  // Watch settingsProvider agar provider ini rebuild setiap kali state berubah.
+  ref.watch(settingsProvider);
+  return ref.read(settingsProvider.notifier).isLoaded;
+});

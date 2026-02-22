@@ -113,12 +113,15 @@ pub fn copy_single_file(
     destination: String,
     skip_existing: bool,
 ) -> NativeFileCopyResult {
+    // Clone sebelum move ke closure agar bisa dipakai di unwrap_or_else
+    let source_clone = source.clone();
+    let destination_clone = destination.clone();
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         copy_single_file_inner(source, destination, skip_existing)
     }))
     .unwrap_or_else(|_| NativeFileCopyResult {
-        source_path: source,
-        dest_path: destination,
+        source_path: source_clone,
+        dest_path: destination_clone,
         bytes_copied: 0,
         duration_ms: 0,
         speed_mbps: 0.0,
@@ -353,12 +356,14 @@ pub fn is_cancelled() -> bool {
 
 /// Compute file hash (MD5 or SHA256)
 pub fn compute_file_hash(file_path: String, algorithm: String) -> NativeHashResult {
+    // Clone sebelum move ke closure agar bisa dipakai di unwrap_or_else
+    let algorithm_clone = algorithm.clone();
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         compute_file_hash_inner(file_path, algorithm)
     }))
     .unwrap_or_else(|_| NativeHashResult {
         hash: String::new(),
-        algorithm,
+        algorithm: algorithm_clone,
         success: false,
         error_message: "Internal panic - hash failed".to_string(),
     })
@@ -429,14 +434,28 @@ fn scan_directory_inner(path: String, extensions: Vec<String>) -> Vec<NativeFile
         return Vec::new();
     }
 
+    // ✅ FIX #6: Ganti walkdir tanpa batas dengan batas keamanan eksplisit.
+    // walkdir::WalkDir tanpa max_depth bisa hang di folder sistem / drive root.
+    // Gunakan konstanta yang sama dengan Dart ScanLimits untuk konsistensi:
+    // - max_depth = 10 level
+    // - max_files = 50_000 file
+    const MAX_DEPTH: usize = 10;
+    const MAX_FILES: usize = 50_000;
+
+    let normalized_ext: Vec<String> = extensions.iter().map(|e| e.to_lowercase()).collect();
     let mut results = Vec::new();
 
     let entries = walkdir::WalkDir::new(&dir)
         .follow_links(false)
+        .max_depth(MAX_DEPTH)
         .into_iter()
-        .filter_map(|e| e.ok());
+        .filter_map(|e| e.ok()); // skip entry yang tidak bisa diakses (permission denied)
 
     for entry in entries {
+        if results.len() >= MAX_FILES {
+            break;
+        }
+
         if !entry.file_type().is_file() {
             continue;
         }
@@ -444,14 +463,15 @@ fn scan_directory_inner(path: String, extensions: Vec<String>) -> Vec<NativeFile
         let file_path = entry.path();
 
         // Filter by extension if specified
-        if !extensions.is_empty() {
-            if let Some(ext) = file_path.extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                if !extensions.iter().any(|e| e.to_lowercase() == ext_str) {
-                    continue;
+        if !normalized_ext.is_empty() {
+            match file_path.extension() {
+                Some(ext) => {
+                    let ext_str = ext.to_string_lossy().to_lowercase();
+                    if !normalized_ext.iter().any(|e| e == &ext_str) {
+                        continue;
+                    }
                 }
-            } else {
-                continue;
+                None => continue,
             }
         }
 

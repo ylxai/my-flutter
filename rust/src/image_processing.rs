@@ -45,7 +45,31 @@ impl Default for ProcessConfig {
     }
 }
 
-/// Process a single image: generate thumbnail + preview in WebP
+/// Decode sebuah gambar dari path — logika terpusat agar tidak duplikat
+/// antara [process_image] dan [process_batch].
+///
+/// `start` diambil sebagai reference agar tidak di-move ke dalam fungsi ini,
+/// sehingga caller masih bisa menggunakan `start.elapsed()` setelah decode.
+fn decode_image(
+    source_path: &Path,
+    source_str: &str,
+    start: &Instant,
+) -> Result<DynamicImage, ImageProcessResult> {
+    let reader = ImageReader::open(source_path)
+        .map_err(|e| make_error(source_str, start, &format!("Open failed: {}", e)))?;
+    let reader = reader
+        .with_guessed_format()
+        .map_err(|e| make_error(source_str, start, &format!("Format guess failed: {}", e)))?;
+    reader
+        .decode()
+        .map_err(|e| make_error(source_str, start, &format!("Decode failed: {}", e)))
+}
+
+/// Process a single image: generate thumbnail + preview in WebP.
+///
+/// Output path:
+/// - thumbnail → `{output_dir}/{stem}_thumb.webp`
+/// - preview   → `{output_dir}/{stem}_preview.webp`
 pub fn process_image(
     source_path: &Path,
     output_dir: &Path,
@@ -62,39 +86,26 @@ pub fn process_image(
     let thumb_path = output_dir.join(format!("{}_thumb.webp", stem));
     let preview_path = output_dir.join(format!("{}_preview.webp", stem));
 
-    // Decode source image
-    let img = match ImageReader::open(source_path) {
-        Ok(reader) => match reader.with_guessed_format() {
-            Ok(r) => match r.decode() {
-                Ok(img) => img,
-                Err(e) => {
-                    return make_error(&source_str, start, &format!("Decode failed: {}", e));
-                }
-            },
-            Err(e) => {
-                return make_error(&source_str, start, &format!("Format guess failed: {}", e));
-            }
-        },
-        Err(e) => {
-            return make_error(&source_str, start, &format!("Open failed: {}", e));
-        }
+    // ✅ FIX P2: Gunakan decode_image() — tidak duplikat logika decode
+    // Pass &start agar start tidak di-move, masih bisa dipakai di bawah
+    let img = match decode_image(source_path, &source_str, &start) {
+        Ok(img) => img,
+        Err(result) => return result,
     };
 
-    // Generate thumbnail
     if let Err(e) =
         resize_and_save_webp(&img, config.thumb_width, config.thumb_quality, &thumb_path)
     {
-        return make_error(&source_str, start, &format!("Thumbnail failed: {}", e));
+        return make_error(&source_str, &start, &format!("Thumbnail failed: {}", e));
     }
 
-    // Generate preview
     if let Err(e) = resize_and_save_webp(
         &img,
         config.preview_width,
         config.preview_quality,
         &preview_path,
     ) {
-        return make_error(&source_str, start, &format!("Preview failed: {}", e));
+        return make_error(&source_str, &start, &format!("Preview failed: {}", e));
     }
 
     let thumb_size = fs::metadata(&thumb_path).map(|m| m.len()).unwrap_or(0);
@@ -112,7 +123,22 @@ pub fn process_image(
     }
 }
 
-/// Process multiple images using rayon for parallelism
+/// Process multiple images secara paralel menggunakan rayon.
+///
+/// ✅ FIX P2: Menggunakan [decode_image] yang terpusat — tidak ada duplikasi
+/// logika decode antara process_image dan process_batch.
+///
+/// ✅ FIX #5: Batasi concurrency rayon untuk mencegah OOM.
+/// Tanpa batas, rayon akan memproses SEMUA gambar secara paralel sekaligus —
+/// 100 foto RAW @30MB = 3GB RAM hanya untuk decode. Solusi: gunakan thread
+/// pool lokal dengan jumlah thread = min(CPU/2, 4) agar:
+/// - Maksimum ~4 gambar di-decode bersamaan
+/// - Sisanya antri dan menunggu slot bebas
+/// - Total RAM usage terkontrol
+///
+/// Output path per file:
+/// - thumbnail → `{output_dir}/thumbs/{stem}.webp`
+/// - preview   → `{output_dir}/previews/{stem}.webp`
 pub fn process_batch(
     source_paths: &[PathBuf],
     output_dir: &Path,
@@ -120,76 +146,90 @@ pub fn process_batch(
 ) -> Vec<ImageProcessResult> {
     use rayon::prelude::*;
 
-    // Ensure output subdirectories exist
+    // Pastikan subdirektori output sudah ada sebelum parallel processing
     let thumbs_dir = output_dir.join("thumbs");
     let previews_dir = output_dir.join("previews");
     let _ = fs::create_dir_all(&thumbs_dir);
     let _ = fs::create_dir_all(&previews_dir);
 
-    source_paths
-        .par_iter()
-        .map(|src| {
-            let stem = src
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+    // ✅ FIX #5: Buat thread pool lokal dengan concurrency terbatas.
+    // num_cpus / 2 memberi ruang untuk IO dan main thread.
+    // Clamp ke 1..=4 agar tidak OOM di mesin RAM kecil maupun mesin besar.
+    //
+    // ✅ FIX kiloconnect: Hapus .expect() di fallback — jika pool gagal,
+    // jalankan langsung di thread saat ini (sequential) tanpa panic.
+    // ThreadPoolBuilder hanya gagal jika OS menolak thread baru (edge case
+    // ekstrem: resource limit), sehingga graceful fallback lebih aman.
+    let num_threads = (num_cpus::get() / 2).clamp(1, 4);
+    let pool_opt = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_threads)
+        .build()
+        .ok();
 
-            let start = Instant::now();
-            let source_str = src.to_string_lossy().to_string();
+    // Closure yang berisi actual processing — bisa dijalankan di pool atau sequential
+    let process = || {
+        source_paths
+            .par_iter()
+            .map(|src| {
+                let start = Instant::now();
+                let source_str = src.to_string_lossy().to_string();
 
-            // Decode
-            let img = match ImageReader::open(src) {
-                Ok(r) => match r.with_guessed_format() {
-                    Ok(r2) => match r2.decode() {
-                        Ok(img) => img,
-                        Err(e) => {
-                            return make_error(&source_str, start, &format!("Decode: {}", e));
-                        }
-                    },
-                    Err(e) => {
-                        return make_error(&source_str, start, &format!("Format: {}", e));
-                    }
-                },
-                Err(e) => {
-                    return make_error(&source_str, start, &format!("Open: {}", e));
+                let stem = src
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                // ✅ Gunakan decode_image() terpusat — tidak duplikasi logika
+                // Pass &start agar start tidak di-move, masih bisa dipakai di bawah
+                let img = match decode_image(src, &source_str, &start) {
+                    Ok(img) => img,
+                    Err(result) => return result,
+                };
+
+                let thumb_path = thumbs_dir.join(format!("{}.webp", stem));
+                let preview_path = previews_dir.join(format!("{}.webp", stem));
+
+                if let Err(e) = resize_and_save_webp(
+                    &img,
+                    config.thumb_width,
+                    config.thumb_quality,
+                    &thumb_path,
+                ) {
+                    return make_error(&source_str, &start, &format!("Thumb: {}", e));
                 }
-            };
 
-            let thumb_path = thumbs_dir.join(format!("{}.webp", stem));
-            let preview_path = previews_dir.join(format!("{}.webp", stem));
+                if let Err(e) = resize_and_save_webp(
+                    &img,
+                    config.preview_width,
+                    config.preview_quality,
+                    &preview_path,
+                ) {
+                    return make_error(&source_str, &start, &format!("Preview: {}", e));
+                }
 
-            // Thumbnail
-            if let Err(e) =
-                resize_and_save_webp(&img, config.thumb_width, config.thumb_quality, &thumb_path)
-            {
-                return make_error(&source_str, start, &format!("Thumb: {}", e));
-            }
+                let thumb_size = fs::metadata(&thumb_path).map(|m| m.len()).unwrap_or(0);
+                let preview_size = fs::metadata(&preview_path).map(|m| m.len()).unwrap_or(0);
 
-            // Preview
-            if let Err(e) = resize_and_save_webp(
-                &img,
-                config.preview_width,
-                config.preview_quality,
-                &preview_path,
-            ) {
-                return make_error(&source_str, start, &format!("Preview: {}", e));
-            }
+                ImageProcessResult {
+                    source_path: source_str,
+                    thumb_path: thumb_path.to_string_lossy().to_string(),
+                    preview_path: preview_path.to_string_lossy().to_string(),
+                    thumb_size,
+                    preview_size,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    success: true,
+                    error_message: String::new(),
+                }
+            })
+            .collect()
+    };
 
-            let thumb_size = fs::metadata(&thumb_path).map(|m| m.len()).unwrap_or(0);
-            let preview_size = fs::metadata(&preview_path).map(|m| m.len()).unwrap_or(0);
-
-            ImageProcessResult {
-                source_path: source_str,
-                thumb_path: thumb_path.to_string_lossy().to_string(),
-                preview_path: preview_path.to_string_lossy().to_string(),
-                thumb_size,
-                preview_size,
-                duration_ms: start.elapsed().as_millis() as u64,
-                success: true,
-                error_message: String::new(),
-            }
-        })
-        .collect()
+    // Jalankan di pool lokal jika berhasil dibuat, otherwise fallback ke
+    // global rayon pool (yang sudah ada dan tidak bisa gagal di sini).
+    match pool_opt {
+        Some(pool) => pool.install(process),
+        None => process(),
+    }
 }
 
 // ── Helpers ──
@@ -220,7 +260,7 @@ fn resize_and_save_webp(
     Ok(())
 }
 
-fn make_error(source: &str, start: Instant, msg: &str) -> ImageProcessResult {
+fn make_error(source: &str, start: &Instant, msg: &str) -> ImageProcessResult {
     ImageProcessResult {
         source_path: source.to_string(),
         thumb_path: String::new(),

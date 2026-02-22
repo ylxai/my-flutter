@@ -1,7 +1,7 @@
 //! File integrity verification via hashing (MD5, SHA256)
 
 use md5::{Digest as Md5Digest, Md5};
-use sha2::{Digest as Sha256Digest, Sha256};
+use sha2::Sha256;
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;

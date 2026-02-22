@@ -1,11 +1,46 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 
+import '../constants/file_constants.dart';
 import '../models/file_item.dart';
 import '../models/copy_result.dart';
 import '../models/performance_settings.dart';
+
+/// Thread-safe work queue untuk parallel copy.
+///
+/// Dart berjalan di single-threaded event loop, namun akses [ListQueue]
+/// dari multiple `async` workers tetap bisa menghasilkan race condition
+/// karena setiap `await` memberi kesempatan worker lain berjalan.
+///
+/// Solusi: gunakan integer index atomik yang di-increment sekali per
+/// item — operasi `_nextIndex++` bersifat atomic di Dart event loop
+/// sehingga tidak ada dua worker yang mendapat index yang sama.
+class _AtomicWorkQueue {
+  final List<FileItem> _items;
+  int _nextIndex = 0;
+
+  _AtomicWorkQueue(List<FileItem> items) : _items = List.unmodifiable(items);
+
+  /// Ambil item berikutnya. Mengembalikan `null` jika queue sudah habis.
+  /// Operasi ini atomic di Dart event loop — tidak ada await di antara
+  /// pembacaan dan increment [_nextIndex].
+  FileItem? dequeue() {
+    if (_nextIndex >= _items.length) return null;
+    return _items[_nextIndex++];
+  }
+
+  bool get isEmpty => _nextIndex >= _items.length;
+}
+
+/// Shared mutable counter yang aman diakses dari multiple async workers
+/// di Dart single-threaded event loop. Setiap increment adalah atomic
+/// karena tidak ada `await` di dalam operasi increment.
+class _SafeCounter {
+  int _value = 0;
+  int get value => _value;
+  void increment([int by = 1]) => _value += by;
+}
 
 /// Service for file operations - validation, copy, and scanning.
 /// Supports pause, resume, and cancel during copy.
@@ -59,25 +94,17 @@ class FileOperationService {
 
   // ── Validation ──
 
-  /// Validate files exist in source folder and match by name
+  /// Validate files exist in source folder and match by name.
+  ///
+  /// Menggunakan [kCopyExtensions] dari [file_constants.dart] sebagai default
+  /// sehingga tidak ada duplikasi daftar ekstensi di berbagai tempat.
+  ///
+  /// Scan dibatasi oleh [ScanLimits.maxDepth] dan [ScanLimits.maxFiles]
+  /// untuk mencegah hang jika user memilih folder sistem / drive root.
   Future<ValidationResult> validateFiles({
     required String sourceFolder,
     required List<String> fileNames,
-    List<String> extensions = const [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'raf',
-      'orf',
-      'rw2',
-      'dng',
-      'raw',
-      'pef',
-      'srw',
-      'jpg',
-      'jpeg',
-    ],
+    List<String> extensions = kCopyExtensions,
   }) async {
     return Isolate.run(() {
       final dir = Directory(sourceFolder);
@@ -98,21 +125,41 @@ class FileOperationService {
         }
       }
 
-      // Scan all files in source folder
+      // ✅ FIX P0-4: Scan dengan batas depth dan jumlah file maksimum.
+      // Mencegah hang / OOM jika folder sangat dalam atau sangat besar.
       final allFiles = <String, List<File>>{};
-      for (final entity in dir.listSync(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          final name = _fileNameWithoutExt(entity.path).toLowerCase();
-          if (!requestedNames.contains(name)) {
-            continue;
+      var scannedCount = 0;
+
+      void scanDir(Directory current, int depth) {
+        if (depth >= ScanLimits.maxDepth) return;
+        if (scannedCount >= ScanLimits.maxFiles) return;
+
+        final List<FileSystemEntity> entities;
+        try {
+          entities = current.listSync(recursive: false, followLinks: false);
+        } catch (_) {
+          return; // Skip direktori yang tidak bisa diakses (permission denied)
+        }
+
+        for (final entity in entities) {
+          if (scannedCount >= ScanLimits.maxFiles) return;
+
+          if (entity is Directory) {
+            scanDir(entity, depth + 1);
+          } else if (entity is File) {
+            final name = _fileNameWithoutExt(entity.path).toLowerCase();
+            if (!requestedNames.contains(name)) continue;
+
+            final ext = _fileExtension(entity.path).toLowerCase();
+            if (!normalizedExt.contains(ext)) continue;
+
+            allFiles.putIfAbsent(name, () => []).add(entity);
+            scannedCount++;
           }
-          final ext = _fileExtension(entity.path).toLowerCase();
-          if (!normalizedExt.contains(ext)) {
-            continue;
-          }
-          allFiles.putIfAbsent(name, () => []).add(entity);
         }
       }
+
+      scanDir(dir, 0);
 
       final validFiles = <FileItem>[];
       final invalidFiles = <InvalidFileItem>[];
@@ -203,26 +250,37 @@ class FileOperationService {
           }
         },
       );
-      final queue = ListQueue<FileItem>.from(files);
+
+      // ✅ FIX P0-1: Gunakan _AtomicWorkQueue (index-based) dan _SafeCounter
+      // sebagai pengganti ListQueue + shared int variables.
+      // Operasi dequeue() dan counter.increment() tidak mengandung await
+      // sehingga bersifat atomic di Dart single-threaded event loop —
+      // tidak ada dua worker yang bisa mengambil item yang sama.
+      final workQueue = _AtomicWorkQueue(files);
+      final processedCounter = _SafeCounter();
+      final bytesCounter = _SafeCounter();
+      final skippedCounter = _SafeCounter();
+      final failedCounter = _SafeCounter();
 
       Future<void> worker() async {
         while (true) {
           if (_isCancelled) return;
-          if (queue.isEmpty) return;
 
-          final file = queue.removeFirst();
+          // dequeue() adalah atomic: baca + increment index tanpa await
+          final file = workQueue.dequeue();
+          if (file == null) return; // queue habis, worker selesai
 
           if (_isPaused) {
             controller.add(
               _makeProgress(
                 files.length,
-                processedFiles,
+                processedCounter.value,
                 '⏸ Paused',
-                bytesCopied,
+                bytesCounter.value,
                 totalBytes,
                 startTime,
-                skippedCount,
-                failedCount,
+                skippedCounter.value,
+                failedCounter.value,
               ),
             );
             await _pauseCompleter?.future;
@@ -243,41 +301,46 @@ class FileOperationService {
 
           try {
             if (skipExisting && _shouldSkipExisting(file, destPath)) {
-              skippedCount++;
-              processedFiles++;
+              // increment() atomic: tidak ada await di dalamnya
+              skippedCounter.increment();
+              processedCounter.increment();
               controller.add(
                 _makeProgress(
                   files.length,
-                  processedFiles,
+                  processedCounter.value,
                   file.name,
-                  bytesCopied,
+                  bytesCounter.value,
                   totalBytes,
                   startTime,
-                  skippedCount,
-                  failedCount,
+                  skippedCounter.value,
+                  failedCounter.value,
+                  currentFilePath: file.path,
                 ),
               );
               continue;
             }
 
             await File(file.path).copy(destPath);
-            bytesCopied += file.size;
+            // increment setelah await selesai — masih atomic karena
+            // tidak ada await lain di antara operasi increment
+            bytesCounter.increment(file.size);
           } catch (e) {
-            failedCount++;
+            failedCounter.increment();
           }
 
-          processedFiles++;
+          processedCounter.increment();
 
           controller.add(
             _makeProgress(
               files.length,
-              processedFiles,
+              processedCounter.value,
               file.name,
-              bytesCopied,
+              bytesCounter.value,
               totalBytes,
               startTime,
-              skippedCount,
-              failedCount,
+              skippedCounter.value,
+              failedCounter.value,
+              currentFilePath: file.path,
             ),
           );
         }
@@ -289,13 +352,13 @@ class FileOperationService {
           controller.add(
             _makeProgress(
               files.length,
-              processedFiles,
+              processedCounter.value,
               'Cancelled',
-              bytesCopied,
+              bytesCounter.value,
               totalBytes,
               startTime,
-              skippedCount,
-              failedCount,
+              skippedCounter.value,
+              failedCounter.value,
             ),
           );
         }
@@ -364,8 +427,24 @@ class FileOperationService {
 
       try {
         if (skipExisting && _shouldSkipExisting(file, destPath)) {
+          // ✅ FIX reviewer: Emit progress saat file di-skip agar
+          // copy_provider.dart bisa tracking skippedFiles dengan benar
+          // di sequential mode (parallelism=1). Tanpa ini, currentFilePath
+          // tidak pernah di-set untuk skipped file sehingga CopyResult.skippedFiles
+          // selalu kosong di mode single-thread.
           skippedCount++;
           processedFiles++;
+          yield _makeProgress(
+            files.length,
+            processedFiles,
+            file.name,
+            bytesCopied,
+            totalBytes,
+            startTime,
+            skippedCount,
+            failedCount,
+            currentFilePath: file.path,
+          );
           continue;
         }
 
@@ -386,6 +465,7 @@ class FileOperationService {
         startTime,
         skippedCount,
         failedCount,
+        currentFilePath: file.path,
       );
     }
   }
@@ -398,8 +478,9 @@ class FileOperationService {
     int totalBytes,
     DateTime startTime,
     int skippedCount,
-    int failedCount,
-  ) {
+    int failedCount, {
+    String currentFilePath = '',
+  }) {
     final elapsed = DateTime.now().difference(startTime);
     final speedMBps = elapsed.inMilliseconds > 0
         ? (bytesCopied / 1024 / 1024) / (elapsed.inMilliseconds / 1000)
@@ -409,6 +490,7 @@ class FileOperationService {
       totalFiles: totalFiles,
       processedFiles: processedFiles,
       currentFileName: currentFileName,
+      currentFilePath: currentFilePath,
       bytesCopied: bytesCopied,
       totalBytes: totalBytes,
       speedMBps: speedMBps,
@@ -420,54 +502,82 @@ class FileOperationService {
 
   // ── Folder Scanning ──
 
-  /// Scan a folder for all image files
+  /// Scan a folder for all image files.
+  ///
+  /// Menggunakan [kScanExtensions] dari [file_constants.dart] sebagai default.
+  ///
+  /// ✅ FIX P0-3 + P0-4: Pakai konstanta terpusat + batas scan aman.
+  /// Scan dibatasi [ScanLimits.maxDepth] level kedalaman dan
+  /// [ScanLimits.maxFiles] jumlah file untuk mencegah hang pada folder besar.
+  /// Symlink tidak di-follow untuk mencegah infinite loop.
   Future<List<FileItem>> scanFolder(
     String folderPath, {
-    List<String> extensions = const [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'raf',
-      'orf',
-      'rw2',
-      'dng',
-      'raw',
-      'pef',
-      'srw',
-      'jpg',
-      'jpeg',
-      'png',
-    ],
+    List<String> extensions = kScanExtensions,
   }) async {
-    return Isolate.run(() {
-      final dir = Directory(folderPath);
-      if (!dir.existsSync()) return <FileItem>[];
+    // ✅ FIX #2: Hapus .timeout() yang misleading.
+    // Isolate.run() berjalan di memori terpisah — .timeout() tidak bisa
+    // menghentikan isolate, hanya "abandon" (caller kembali dengan [])
+    // tapi isolate terus berjalan di background membuang CPU + RAM.
+    //
+    // Solusi yang benar: ScanLimits.maxFiles + ScanLimits.maxDepth sudah
+    // menjadi hard stop di dalam isolate — scan pasti selesai dalam waktu
+    // wajar tanpa perlu timeout eksternal. Ini lebih efisien dan jujur.
+    try {
+      return await Isolate.run(() {
+        final dir = Directory(folderPath);
+        if (!dir.existsSync()) return <FileItem>[];
 
-      final results = <FileItem>[];
+        final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
+        final localResults = <FileItem>[];
 
-      final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
+        // Rekursif manual dengan batas depth dan jumlah file.
+        // ScanLimits.maxFiles + ScanLimits.maxDepth adalah hard stop
+        // yang memastikan isolate selesai dalam waktu wajar tanpa
+        // perlu timeout eksternal yang misleading.
+        void scanDir(Directory current, int depth) {
+          if (depth >= ScanLimits.maxDepth) return;
+          if (localResults.length >= ScanLimits.maxFiles) return;
 
-      for (final entity in dir.listSync(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          final ext = _fileExtension(entity.path).toLowerCase();
-          if (normalizedExt.contains(ext)) {
-            final stat = entity.statSync();
-            results.add(
-              FileItem(
-                path: entity.path,
-                name: _fileName(entity.path),
-                size: stat.size,
-                createdDate: stat.changed,
-                modifiedDate: stat.modified,
-              ),
-            );
+          final List<FileSystemEntity> entities;
+          try {
+            entities = current.listSync(recursive: false, followLinks: false);
+          } catch (_) {
+            return; // Skip folder yang tidak bisa diakses (permission denied)
+          }
+
+          for (final entity in entities) {
+            if (localResults.length >= ScanLimits.maxFiles) return;
+
+            if (entity is Directory) {
+              scanDir(entity, depth + 1);
+            } else if (entity is File) {
+              final ext = _fileExtension(entity.path).toLowerCase();
+              if (!normalizedExt.contains(ext)) continue;
+
+              try {
+                final stat = entity.statSync();
+                localResults.add(
+                  FileItem(
+                    path: entity.path,
+                    name: _fileName(entity.path),
+                    size: stat.size,
+                    createdDate: stat.changed,
+                    modifiedDate: stat.modified,
+                  ),
+                );
+              } catch (_) {
+                // Skip file yang tidak bisa dibaca stat-nya
+              }
+            }
           }
         }
-      }
 
-      return results;
-    });
+        scanDir(dir, 0);
+        return localResults;
+      });
+    } catch (_) {
+      return <FileItem>[]; // isolate error: kembalikan list kosong
+    }
   }
 
   // ── Helper functions ──
