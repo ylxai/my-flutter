@@ -64,10 +64,11 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   @override
   int get rustContentHash => 1585710994;
 
-  static const kDefaultExternalLibraryLoaderConfig =
+  static ExternalLibraryLoaderConfig get kDefaultExternalLibraryLoaderConfig =>
       ExternalLibraryLoaderConfig(
         stem: 'filecopy_native',
-        ioDirectory: 'rust/target/release/',
+        ioDirectory:
+            "rust/target/${const bool.fromEnvironment('dart.vm.product') ? 'release' : 'debug'}/",
         webPrefix: 'pkg/',
       );
 }

@@ -275,22 +275,17 @@ codec: DcoCodec(
 - **Location:** `lib/src/rust/frb_generated.dart:69-70`
 - **Detected language:** Dart
 - **Issue:** `ioDirectory: 'rust/target/release/'` - hardcoded path that may not exist or be incorrect
-- **Evidence:** 
-  ```dart
-  ExternalLibraryLoaderConfig(
-    stem: 'filecopy_native',
-    ioDirectory: 'rust/target/release/',
-    webPrefix: 'pkg/',
-  )
-  ```
 - **Risk:** Incorrect in debug builds, broken if directory structure changes
 - **Severity:** MEDIUM
-- **Fix:** Use environment-relative path or flutter_rust_bridge's asset bundling:
+- **Status:** FIXED
+- **Resolution:** `ioDirectory` sekarang mengikuti build mode (`debug`/`release`) via `dart.vm.product`.
+- **Fix (implemented):**
 ```dart
-static const kDefaultExternalLibraryLoaderConfig =
+static ExternalLibraryLoaderConfig get kDefaultExternalLibraryLoaderConfig =>
     ExternalLibraryLoaderConfig(
       stem: 'filecopy_native',
-      ioDirectory: 'rust/target/${bool.fromEnvironment('dart.vm.product') ? 'release' : 'debug'}/',
+      ioDirectory:
+          "rust/target/${const bool.fromEnvironment('dart.vm.product') ? 'release' : 'debug'}/",
       webPrefix: 'pkg/',
     );
 ```
