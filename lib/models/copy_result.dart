@@ -103,7 +103,7 @@ class CopyProgress {
 
   String get etaDisplay {
     final eta = estimatedTimeRemaining;
-    if (eta == Duration.zero) return 'Menghitung...';
+    if (eta == Duration.zero) return 'Calculating...';
     final m = eta.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = eta.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s remaining';
