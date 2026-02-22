@@ -269,7 +269,11 @@ void main() {
     final sliderFinder = find.byType(Slider);
     if (sliderFinder.evaluate().isNotEmpty) {
       await tester.ensureVisible(sliderFinder.first);
-      await tester.drag(sliderFinder.first, const Offset(100, 0));
+      await tester.drag(
+        sliderFinder.first,
+        const Offset(60, 0),
+        warnIfMissed: false,
+      );
       await tester.pumpAndSettle();
     }
 
