@@ -47,7 +47,11 @@ impl Default for ProcessConfig {
 
 /// Decode sebuah gambar dari path — logika terpusat agar tidak duplikat
 /// antara [process_image] dan [process_batch].
-fn decode_image(source_path: &Path, source_str: &str, start: Instant) -> Result<DynamicImage, ImageProcessResult> {
+fn decode_image(
+    source_path: &Path,
+    source_str: &str,
+    start: Instant,
+) -> Result<DynamicImage, ImageProcessResult> {
     let reader = ImageReader::open(source_path)
         .map_err(|e| make_error(source_str, start, &format!("Open failed: {}", e)))?;
     let reader = reader
