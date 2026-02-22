@@ -76,9 +76,7 @@ void main() {
       ProviderScope(
         overrides: [
           filePickerProvider.overrideWithValue(filePicker),
-          settingsProvider.overrideWith(
-            () => settings,
-          ),
+          settingsProvider.overrideWith(() => settings),
           r2ServiceProvider.overrideWithValue(FakeR2UploadService()),
           driveServiceProvider.overrideWithValue(FakeDriveUploadService()),
           uploadOrchestratorFactoryProvider.overrideWithValue(
@@ -177,9 +175,7 @@ void main() {
       ProviderScope(
         overrides: [
           filePickerProvider.overrideWithValue(filePicker),
-          settingsProvider.overrideWith(
-            () => settings,
-          ),
+          settingsProvider.overrideWith(() => settings),
           r2ServiceProvider.overrideWithValue(FakeR2UploadService()),
           driveServiceProvider.overrideWithValue(FakeDriveUploadService()),
           uploadOrchestratorFactoryProvider.overrideWithValue(
@@ -232,11 +228,7 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          settingsProvider.overrideWith(
-            () => settings,
-          ),
-        ],
+        overrides: [settingsProvider.overrideWith(() => settings)],
         child: const FileCopyApp(),
       ),
     );

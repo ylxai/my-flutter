@@ -13,10 +13,9 @@ final _galleryFilesProvider =
       _GalleryFilesNotifier.new,
     );
 
-final _galleryLoadingProvider =
-    NotifierProvider<_GalleryLoadingNotifier, bool>(
-      _GalleryLoadingNotifier.new,
-    );
+final _galleryLoadingProvider = NotifierProvider<_GalleryLoadingNotifier, bool>(
+  _GalleryLoadingNotifier.new,
+);
 
 class _GalleryFilesNotifier extends Notifier<List<FileItem>> {
   @override

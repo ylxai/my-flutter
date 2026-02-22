@@ -180,7 +180,9 @@ class CopyNotifier extends Notifier<CopyState> {
   }
 }
 
-final copyProvider = NotifierProvider<CopyNotifier, CopyState>(CopyNotifier.new);
+final copyProvider = NotifierProvider<CopyNotifier, CopyState>(
+  CopyNotifier.new,
+);
 
 // ── Dashboard Stats ──
 

@@ -65,7 +65,6 @@ class PublishRecord {
 
 /// Publish history state notifier
 class PublishHistoryNotifier extends Notifier<List<PublishRecord>> {
-
   @override
   List<PublishRecord> build() {
     _load();
@@ -118,7 +117,6 @@ class PublishHistoryNotifier extends Notifier<List<PublishRecord>> {
     state = [];
     _save();
   }
-
 }
 
 final publishHistoryProvider =

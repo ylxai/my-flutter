@@ -225,19 +225,21 @@ class UploadNotifier extends Notifier<UploadState> {
     required bool isSuccess,
     UploadProgress? progress,
   }) {
-    ref.read(publishHistoryProvider.notifier).addRecord(
-      PublishRecord(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        eventName: config.eventName,
-        publishedAt: DateTime.now(),
-        photoCount: progress?.totalFiles ?? 0,
-        successCount: progress?.successCount ?? 0,
-        failedCount: progress?.failedCount ?? 0,
-        duration: progress?.totalDuration ?? Duration.zero,
-        galleryUrl: progress?.galleryUrl ?? '',
-        isSuccess: isSuccess,
-      ),
-    );
+    ref
+        .read(publishHistoryProvider.notifier)
+        .addRecord(
+          PublishRecord(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            eventName: config.eventName,
+            publishedAt: DateTime.now(),
+            photoCount: progress?.totalFiles ?? 0,
+            successCount: progress?.successCount ?? 0,
+            failedCount: progress?.failedCount ?? 0,
+            duration: progress?.totalDuration ?? Duration.zero,
+            galleryUrl: progress?.galleryUrl ?? '',
+            isSuccess: isSuccess,
+          ),
+        );
   }
 
   /// Cancel the upload
@@ -273,8 +275,9 @@ final uploadOrchestratorFactoryProvider = Provider<UploadOrchestratorFactory>((
   };
 });
 
-final uploadProvider =
-    NotifierProvider<UploadNotifier, UploadState>(UploadNotifier.new);
+final uploadProvider = NotifierProvider<UploadNotifier, UploadState>(
+  UploadNotifier.new,
+);
 typedef UploadOrchestratorFactory =
     UploadOrchestrator Function({
       required R2UploadService r2Service,

@@ -292,5 +292,6 @@ class SettingsNotifier extends Notifier<SettingsState> {
   String _r2SecretKeyKey(String id) => 'r2_secret_key_$id';
 }
 
-final settingsProvider =
-    NotifierProvider<SettingsNotifier, SettingsState>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, SettingsState>(
+  SettingsNotifier.new,
+);
