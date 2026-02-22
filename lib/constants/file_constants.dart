@@ -50,7 +50,10 @@ const List<String> kScanExtensions = [
 /// Batas keamanan untuk operasi scan folder.
 ///
 /// Mencegah hang / OOM jika user memilih folder sistem atau drive root.
-class ScanLimits {
+///
+/// Gunakan [abstract final class] agar tidak bisa di-instantiate secara
+/// tidak sengaja — semua member adalah static const.
+abstract final class ScanLimits {
   /// Kedalaman direktori maksimum yang akan di-scan secara rekursif.
   /// Contoh: depth 5 artinya folder/a/b/c/d/e sudah merupakan level terdalam.
   static const int maxDepth = 10;

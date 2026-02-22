@@ -18,17 +18,20 @@ import '../services/file_picker_adapter.dart';
 
 /// Controller untuk semua aksi di Copy Page.
 ///
-/// Di-instantiate oleh [_MainScreenState] dan menerima [WidgetRef] serta
-/// callback [addLog] agar controller bisa menulis ke log UI tanpa
-/// memegang referensi langsung ke widget.
+/// Di-instantiate oleh [_MainScreenState]. Menerima callback [addLog]
+/// agar controller bisa menulis ke log UI tanpa memegang referensi ke widget.
+///
+/// ✅ FIX reviewer: [WidgetRef] TIDAK disimpan sebagai field — ini anti-pattern
+/// Riverpod karena ref bisa menjadi stale jika widget tree rebuild.
+/// Setiap method menerima [WidgetRef] sebagai parameter agar selalu
+/// menggunakan ref yang fresh dari widget scope.
 class CopyController {
-  final WidgetRef ref;
   final void Function(String message) addLog;
 
-  CopyController({required this.ref, required this.addLog});
+  CopyController({required this.addLog});
 
   /// Buka dialog pilih folder sumber
-  Future<void> selectSourceFolder() async {
+  Future<void> selectSourceFolder(WidgetRef ref) async {
     final picker = ref.read(filePickerProvider);
     final result = await picker.getDirectoryPath(
       dialogTitle: 'Select Source Folder',
@@ -40,7 +43,7 @@ class CopyController {
   }
 
   /// Import file names dari .txt atau .csv
-  Future<String?> importFile() async {
+  Future<String?> importFile(WidgetRef ref) async {
     final picker = ref.read(filePickerProvider);
     final result = await picker.pickFiles(
       type: FileType.custom,
@@ -58,7 +61,7 @@ class CopyController {
   }
 
   /// Paste file names dari clipboard
-  Future<String?> pasteFromClipboard() async {
+  Future<String?> pasteFromClipboard(WidgetRef ref) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     if (data?.text != null) {
       final names = _parseFileNames(data!.text!);
@@ -70,7 +73,7 @@ class CopyController {
   }
 
   /// Scan folder sumber dan isi file list otomatis
-  Future<List<String>?> scanFolder(String sourceFolder) async {
+  Future<List<String>?> scanFolder(WidgetRef ref, String sourceFolder) async {
     if (sourceFolder.isEmpty) {
       addLog('⚠️ Select a source folder first');
       return null;
@@ -91,7 +94,7 @@ class CopyController {
   }
 
   /// Validasi file names terhadap source folder
-  Future<void> validateFiles() async {
+  Future<void> validateFiles(WidgetRef ref) async {
     addLog('🔍 Validating...');
     await ref.read(copyProvider.notifier).validateFiles();
     final state = ref.read(copyProvider);
@@ -102,7 +105,7 @@ class CopyController {
   }
 
   /// Mulai operasi copy
-  Future<void> startCopy() async {
+  Future<void> startCopy(WidgetRef ref) async {
     addLog('🚀 Starting copy...');
     await ref.read(copyProvider.notifier).startCopy();
     final state = ref.read(copyProvider);
@@ -114,7 +117,7 @@ class CopyController {
   }
 
   /// Toggle pause/resume
-  void togglePause() {
+  void togglePause(WidgetRef ref) {
     final notifier = ref.read(copyProvider.notifier);
     if (notifier.isPaused) {
       notifier.resumeCopy();
@@ -126,7 +129,7 @@ class CopyController {
   }
 
   /// Cancel operasi copy
-  void cancelCopy() {
+  void cancelCopy(WidgetRef ref) {
     ref.read(copyProvider.notifier).cancelCopy();
     addLog('❌ Cancelled');
   }
@@ -140,6 +143,7 @@ class CopyController {
   /// Mengembalikan konten text area yang sudah diupdate, atau null jika
   /// tidak ada perubahan.
   Future<String?> handleDrop({
+    required WidgetRef ref,
     required DropDoneDetails details,
     required String currentTextContent,
   }) async {

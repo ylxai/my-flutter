@@ -34,7 +34,9 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = CopyController(ref: ref, addLog: _addLog);
+    // ✅ FIX reviewer: CopyController tidak menyimpan ref sebagai field.
+    // ref di-pass per method call dari widget scope agar selalu fresh.
+    _controller = CopyController(addLog: _addLog);
   }
 
   @override
@@ -935,11 +937,11 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   // ═══════════════════════════════════════
 
   Future<void> _selectSourceFolder() async {
-    await _controller.selectSourceFolder();
+    await _controller.selectSourceFolder(ref);
   }
 
   Future<void> _importFile() async {
-    final content = await _controller.importFile();
+    final content = await _controller.importFile(ref);
     if (content != null) {
       _fileListController.text = content;
       setState(() {});
@@ -947,7 +949,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Future<void> _pasteFromClipboard() async {
-    final content = await _controller.pasteFromClipboard();
+    final content = await _controller.pasteFromClipboard(ref);
     if (content != null) {
       _fileListController.text = content;
       setState(() {});
@@ -955,7 +957,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Future<void> _scanFolder(CopyState copyState) async {
-    final names = await _controller.scanFolder(copyState.sourceFolder);
+    final names = await _controller.scanFolder(ref, copyState.sourceFolder);
     if (names != null) {
       _fileListController.text = names.join('\n');
       setState(() {});
@@ -963,23 +965,24 @@ class _MainScreenState extends ConsumerState<MainScreen> {
   }
 
   Future<void> _validateFiles() async {
-    await _controller.validateFiles();
+    await _controller.validateFiles(ref);
   }
 
   Future<void> _startCopy() async {
-    await _controller.startCopy();
+    await _controller.startCopy(ref);
   }
 
   void _togglePause() {
-    _controller.togglePause();
+    _controller.togglePause(ref);
   }
 
   void _cancelCopy() {
-    _controller.cancelCopy();
+    _controller.cancelCopy(ref);
   }
 
   Future<void> _handleDrop(DropDoneDetails details) async {
     final newContent = await _controller.handleDrop(
+      ref: ref,
       details: details,
       currentTextContent: _fileListController.text,
     );

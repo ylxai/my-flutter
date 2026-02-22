@@ -131,11 +131,21 @@ class CopyNotifier extends Notifier<CopyState> {
     final startTime = DateTime.now();
     state = state.copyWith(status: CopyStatus.copying);
 
-    // Kumpulkan tracking per-file selama proses copy berlangsung.
-    // Kita track nama file yang sudah diproses untuk bisa membagi
-    // validFiles ke successfulFiles vs skippedFiles vs failedFiles.
-    final skippedNames = <String>{};
-    final failedNames = <String>{};
+    // ✅ FIX reviewer: Gunakan path identity (bukan nama file) untuk tracking
+    // per-file. Tracking berbasis nama bisa collision jika ada 2 file dengan
+    // nama sama di folder berbeda. Path adalah identifier unik per FileItem.
+    //
+    // Tracking dilakukan SEBELUM stream dimulai berdasarkan snapshot
+    // validFiles — ini menghindari race condition di parallel copy mode
+    // di mana global counter bisa naik dari worker berbeda.
+    final allFiles = List<FileItem>.from(state.validFiles);
+    final skippedPaths = <String>{};
+    final failedPaths = <String>{};
+
+    // Build map path → FileItem untuk lookup O(1)
+    final fileByPath = <String, FileItem>{
+      for (final f in allFiles) f.path: f,
+    };
 
     try {
       final stream = _fileService.copyFiles(
@@ -149,19 +159,19 @@ class CopyNotifier extends Notifier<CopyState> {
             ? CopyStatus.paused
             : CopyStatus.copying;
 
-        // Track file yang diproses untuk kategorisasi hasil akhir
-        final currentFile = progress.currentFileName;
-        if (currentFile.isNotEmpty &&
-            currentFile != '⏸ Paused' &&
-            currentFile != 'Cancelled') {
-          // Deteksi file yang di-skip: skippedCount naik tapi belum tercatat
-          if (progress.skippedCount > skippedNames.length) {
-            skippedNames.add(currentFile);
+        // Track file yang diproses untuk kategorisasi hasil akhir.
+        // Gunakan currentFilePath (path lengkap) bukan currentFileName
+        // agar tidak collision ketika ada file dengan nama sama di folder beda.
+        final currentPath = progress.currentFilePath;
+        if (currentPath.isNotEmpty && fileByPath.containsKey(currentPath)) {
+          // Deteksi file yang di-skip: skippedCount naik tapi path belum tercatat
+          if (progress.skippedCount > skippedPaths.length) {
+            skippedPaths.add(currentPath);
           }
 
-          // Deteksi file yang gagal: failedCount naik tapi belum tercatat
-          if (progress.failedCount > failedNames.length) {
-            failedNames.add(currentFile);
+          // Deteksi file yang gagal: failedCount naik tapi path belum tercatat
+          if (progress.failedCount > failedPaths.length) {
+            failedPaths.add(currentPath);
           }
         }
 
@@ -178,28 +188,26 @@ class CopyNotifier extends Notifier<CopyState> {
       final endTime = DateTime.now();
 
       // ✅ FIX P0-2: Isi successfulFiles, failedFiles, skippedFiles
-      // dengan benar berdasarkan tracking selama proses copy.
-      final allFiles = state.validFiles;
-
+      // dengan benar berdasarkan tracking path selama proses copy.
       final failedFiles = allFiles
-          .where((f) => failedNames.contains(f.name))
+          .where((f) => failedPaths.contains(f.path))
           .map(
             (f) => FailedFileItem(
               file: f,
-              error: 'Copy failed — lihat log untuk detail',
+              error: 'Copy failed — see log for details',
             ),
           )
           .toList();
 
       final skippedFiles = allFiles
-          .where((f) => skippedNames.contains(f.name))
+          .where((f) => skippedPaths.contains(f.path))
           .toList();
 
       final successfulFiles = allFiles
           .where(
             (f) =>
-                !failedNames.contains(f.name) &&
-                !skippedNames.contains(f.name),
+                !failedPaths.contains(f.path) &&
+                !skippedPaths.contains(f.path),
           )
           .toList();
 

@@ -314,6 +314,7 @@ class FileOperationService {
                   startTime,
                   skippedCounter.value,
                   failedCounter.value,
+                  currentFilePath: file.path,
                 ),
               );
               continue;
@@ -339,6 +340,7 @@ class FileOperationService {
               startTime,
               skippedCounter.value,
               failedCounter.value,
+              currentFilePath: file.path,
             ),
           );
         }
@@ -447,6 +449,7 @@ class FileOperationService {
         startTime,
         skippedCount,
         failedCount,
+        currentFilePath: file.path,
       );
     }
   }
@@ -459,8 +462,9 @@ class FileOperationService {
     int totalBytes,
     DateTime startTime,
     int skippedCount,
-    int failedCount,
-  ) {
+    int failedCount, {
+    String currentFilePath = '',
+  }) {
     final elapsed = DateTime.now().difference(startTime);
     final speedMBps = elapsed.inMilliseconds > 0
         ? (bytesCopied / 1024 / 1024) / (elapsed.inMilliseconds / 1000)
@@ -470,6 +474,7 @@ class FileOperationService {
       totalFiles: totalFiles,
       processedFiles: processedFiles,
       currentFileName: currentFileName,
+      currentFilePath: currentFilePath,
       bytesCopied: bytesCopied,
       totalBytes: totalBytes,
       speedMBps: speedMBps,

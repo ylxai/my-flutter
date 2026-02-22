@@ -58,6 +58,10 @@ class CopyProgress {
   final int totalFiles;
   final int processedFiles;
   final String currentFileName;
+  /// Path lengkap file yang sedang diproses — digunakan untuk tracking
+  /// per-file berdasarkan path identity (bukan nama) agar tidak collision
+  /// ketika ada dua file dengan nama sama di folder berbeda.
+  final String currentFilePath;
   final int bytesCopied;
   final int totalBytes;
   final double speedMBps;
@@ -69,6 +73,7 @@ class CopyProgress {
     this.totalFiles = 0,
     this.processedFiles = 0,
     this.currentFileName = '',
+    this.currentFilePath = '',
     this.bytesCopied = 0,
     this.totalBytes = 0,
     this.speedMBps = 0,

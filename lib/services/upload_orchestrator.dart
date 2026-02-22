@@ -264,6 +264,9 @@ class UploadOrchestrator {
 
       // Phase 4: Upload originals to Google Drive (if enabled)
       String? driveFolderId;
+      // ✅ FIX reviewer: Hoist driveFailedCount ke outer scope agar bisa
+      // dimasukkan ke failedCount final di completed event.
+      int driveFailedCount = 0;
       if (config.uploadOriginalToDrive && _driveService.isAuthenticated) {
         try {
           driveFolderId = await _withRetry(
@@ -297,7 +300,6 @@ class UploadOrchestrator {
         }
         // ✅ FIX P1-1: Continue-on-error untuk Drive upload juga.
         // Gagal upload 1 file ke Drive tidak harus abort seluruh pipeline.
-        int driveFailedCount = 0;
         for (int i = 0; i < driveFiles.length; i++) {
           if (_isCancelled) return;
 
@@ -329,12 +331,15 @@ class UploadOrchestrator {
       // Phase 5: Generate and upload manifest
       // ✅ FIX P1-1: Manifest hanya berisi file yang berhasil di-upload ke R2,
       // bukan semua processedFiles (beberapa mungkin gagal upload).
+      // ✅ FIX reviewer: totalFailedCount menggabungkan R2 + Drive failures.
+      final totalFailedCount = r2FailedCount + driveFailedCount;
+
       yield UploadProgress(
         phase: UploadPhase.generatingManifest,
         message: 'Generating manifest...',
         overallProgress: 0.95,
         successCount: successfulFiles.length,
-        failedCount: r2FailedCount,
+        failedCount: totalFailedCount,
       );
 
       final manifest = GalleryManifest(
@@ -363,9 +368,9 @@ class UploadOrchestrator {
 
       stopwatch.stop();
 
-      // Pesan berbeda jika ada file yang gagal vs semua sukses
-      final completionMessage = r2FailedCount > 0
-          ? 'Upload selesai dengan $r2FailedCount file gagal.'
+      // ✅ FIX reviewer: Pesan konsisten dalam bahasa Inggris
+      final completionMessage = totalFailedCount > 0
+          ? 'Upload completed with $totalFailedCount file(s) failed.'
           : 'Upload complete!';
 
       yield UploadProgress(
@@ -376,7 +381,7 @@ class UploadOrchestrator {
         overallProgress: 1.0,
         galleryUrl: manifestUrl,
         successCount: successfulFiles.length,
-        failedCount: r2FailedCount,
+        failedCount: totalFailedCount,
         totalDuration: stopwatch.elapsed,
       );
     } finally {
