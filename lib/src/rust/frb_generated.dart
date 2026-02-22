@@ -6,6 +6,7 @@
 import 'api.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
@@ -67,10 +68,17 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   static ExternalLibraryLoaderConfig get kDefaultExternalLibraryLoaderConfig =>
       ExternalLibraryLoaderConfig(
         stem: 'filecopy_native',
-        ioDirectory:
-            "rust/target/${const bool.fromEnvironment('dart.vm.product') ? 'release' : 'debug'}/",
+        ioDirectory: _nativeLibDirectory,
         webPrefix: 'pkg/',
       );
+
+  static String get _nativeLibDirectory {
+    final mode = const bool.fromEnvironment('dart.vm.product')
+        ? 'release'
+        : 'debug';
+    final currentDir = Directory.current.path;
+    return '$currentDir/rust/target/$mode/';
+  }
 }
 
 abstract class RustLibApi extends BaseApi {

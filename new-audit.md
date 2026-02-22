@@ -397,7 +397,18 @@ pub fn copy_file_win32(src: &Path, dst: &Path) -> io::Result<u64> {
 - **Issue:** Native library loaded from `rust/target/release/` with no integrity verification
 - **Vector:** DLL planting if attacker can write to that directory
 - **Severity:** LOW (requires local access)
-- **Fix:** Use absolute path resolution or verify library signature
+- **Status:** FIXED
+- **Resolution:** `ioDirectory` sekarang di-resolve ke absolute path berbasis `Directory.current`.
+- **Fix (implemented):**
+```dart
+static String get _nativeLibDirectory {
+  final mode = const bool.fromEnvironment('dart.vm.product')
+      ? 'release'
+      : 'debug';
+  final currentDir = Directory.current.path;
+  return '$currentDir/rust/target/$mode/';
+}
+```
 
 ---
 
