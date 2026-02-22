@@ -155,69 +155,81 @@ pub fn process_batch(
     // ✅ FIX #5: Buat thread pool lokal dengan concurrency terbatas.
     // num_cpus / 2 memberi ruang untuk IO dan main thread.
     // Clamp ke 1..=4 agar tidak OOM di mesin RAM kecil maupun mesin besar.
+    //
+    // ✅ FIX kiloconnect: Hapus .expect() di fallback — jika pool gagal,
+    // jalankan langsung di thread saat ini (sequential) tanpa panic.
+    // ThreadPoolBuilder hanya gagal jika OS menolak thread baru (edge case
+    // ekstrem: resource limit), sehingga graceful fallback lebih aman.
     let num_threads = (num_cpus::get() / 2).clamp(1, 4);
-    let pool = rayon::ThreadPoolBuilder::new()
+    let pool_opt = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()
-        .unwrap_or_else(|_| {
-            // Fallback: gunakan global pool jika build gagal
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(2)
-                .build()
-                .expect("Fallback thread pool build failed")
-        });
+        .ok();
 
-    pool.install(|| {
-        source_paths.par_iter().map(|src| {
-            let start = Instant::now();
-            let source_str = src.to_string_lossy().to_string();
+    // Closure yang berisi actual processing — bisa dijalankan di pool atau sequential
+    let process = || {
+        source_paths
+            .par_iter()
+            .map(|src| {
+                let start = Instant::now();
+                let source_str = src.to_string_lossy().to_string();
 
-            let stem = src
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+                let stem = src
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "unknown".to_string());
 
-            // ✅ Gunakan decode_image() terpusat — tidak duplikasi logika
-            // Pass &start agar start tidak di-move, masih bisa dipakai di bawah
-            let img = match decode_image(src, &source_str, &start) {
-                Ok(img) => img,
-                Err(result) => return result,
-            };
+                // ✅ Gunakan decode_image() terpusat — tidak duplikasi logika
+                // Pass &start agar start tidak di-move, masih bisa dipakai di bawah
+                let img = match decode_image(src, &source_str, &start) {
+                    Ok(img) => img,
+                    Err(result) => return result,
+                };
 
-            let thumb_path = thumbs_dir.join(format!("{}.webp", stem));
-            let preview_path = previews_dir.join(format!("{}.webp", stem));
+                let thumb_path = thumbs_dir.join(format!("{}.webp", stem));
+                let preview_path = previews_dir.join(format!("{}.webp", stem));
 
-            if let Err(e) =
-                resize_and_save_webp(&img, config.thumb_width, config.thumb_quality, &thumb_path)
-            {
-                return make_error(&source_str, &start, &format!("Thumb: {}", e));
-            }
+                if let Err(e) = resize_and_save_webp(
+                    &img,
+                    config.thumb_width,
+                    config.thumb_quality,
+                    &thumb_path,
+                ) {
+                    return make_error(&source_str, &start, &format!("Thumb: {}", e));
+                }
 
-            if let Err(e) = resize_and_save_webp(
-                &img,
-                config.preview_width,
-                config.preview_quality,
-                &preview_path,
-            ) {
-                return make_error(&source_str, &start, &format!("Preview: {}", e));
-            }
+                if let Err(e) = resize_and_save_webp(
+                    &img,
+                    config.preview_width,
+                    config.preview_quality,
+                    &preview_path,
+                ) {
+                    return make_error(&source_str, &start, &format!("Preview: {}", e));
+                }
 
-            let thumb_size = fs::metadata(&thumb_path).map(|m| m.len()).unwrap_or(0);
-            let preview_size = fs::metadata(&preview_path).map(|m| m.len()).unwrap_or(0);
+                let thumb_size = fs::metadata(&thumb_path).map(|m| m.len()).unwrap_or(0);
+                let preview_size = fs::metadata(&preview_path).map(|m| m.len()).unwrap_or(0);
 
-            ImageProcessResult {
-                source_path: source_str,
-                thumb_path: thumb_path.to_string_lossy().to_string(),
-                preview_path: preview_path.to_string_lossy().to_string(),
-                thumb_size,
-                preview_size,
-                duration_ms: start.elapsed().as_millis() as u64,
-                success: true,
-                error_message: String::new(),
-            }
-        })
-        .collect()
-    })
+                ImageProcessResult {
+                    source_path: source_str,
+                    thumb_path: thumb_path.to_string_lossy().to_string(),
+                    preview_path: preview_path.to_string_lossy().to_string(),
+                    thumb_size,
+                    preview_size,
+                    duration_ms: start.elapsed().as_millis() as u64,
+                    success: true,
+                    error_message: String::new(),
+                }
+            })
+            .collect()
+    };
+
+    // Jalankan di pool lokal jika berhasil dibuat, otherwise fallback ke
+    // global rayon pool (yang sudah ada dan tidak bisa gagal di sini).
+    match pool_opt {
+        Some(pool) => pool.install(process),
+        None => process(),
+    }
 }
 
 // ── Helpers ──
