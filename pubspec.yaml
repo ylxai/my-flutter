@@ -13,33 +13,33 @@ dependencies:
   cupertino_icons: ^1.0.8
   
   # State Management
-  flutter_riverpod: ^2.6.1
-  riverpod_annotation: ^2.6.1
+  flutter_riverpod: ^3.2.1
+  riverpod_annotation: ^4.0.2
   
   # File Operations
-  file_picker: ^8.1.6
-  desktop_drop: ^0.5.0
+  file_picker: ^10.3.10
+  desktop_drop: ^0.7.0
   path_provider: ^2.1.5
   path: ^1.9.1
   
   # UI
-  google_fonts: ^6.2.1
+  google_fonts: ^8.0.2
   flutter_animate: ^4.5.2
   
   # Storage
   shared_preferences: ^2.3.4
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^10.0.0
   
   # Crypto/Hash
   crypto: ^3.0.6
   
   # Utils
-  intl: ^0.19.0
+  intl: ^0.20.2
   uuid: ^4.5.3
   collection: ^1.19.1
   
   # Rust FFI bridge
-  flutter_rust_bridge: 2.9.0
+  flutter_rust_bridge: 2.11.1
   
   # Cloud Upload (Hybrid Upload System)
   minio: ^3.5.8
@@ -49,18 +49,18 @@ dependencies:
   
   # Freezed for models
   freezed_annotation: ^3.0.0
-  json_annotation: ^4.9.0
+  json_annotation: ^4.11.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   integration_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
-  build_runner: ^2.4.14
-  freezed: ^3.0.0
-  json_serializable: ^6.9.4
-  riverpod_generator: ^2.6.3
+  flutter_lints: ^6.0.0
+  build_runner: ^2.11.1
+  freezed: ^3.2.5
+  json_serializable: ^6.13.0
+  riverpod_generator: ^4.0.3
 
 flutter:
   uses-material-design: true
