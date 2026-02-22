@@ -52,7 +52,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install flutter_rust_bridge_codegen
-        run: cargo install flutter_rust_bridge_codegen@2.9.0
+        run: cargo install flutter_rust_bridge_codegen@2.9.0 --locked
 
       - name: Get Dependencies
         run: flutter pub get
@@ -131,7 +131,7 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Install flutter_rust_bridge_codegen
-        run: cargo install flutter_rust_bridge_codegen@2.9.0
+        run: cargo install flutter_rust_bridge_codegen@2.9.0 --locked
 
       - name: Get Dependencies
         run: flutter pub get
