@@ -91,6 +91,13 @@
 - **P2-1** — `main_screen.dart` → `CopyController` controller terpisah + `kScanExtensions`
 - **P2-2** — Duplikat decode Rust → `decode_image()` terpusat + fix pre-existing moved value errors
 - **P2-3** — Scan tak terbatas → selesai di P0-4
+- **PR Review** — 6 issue dari code reviewer diselesaikan:
+  - `driveFailedCount` di-hoist ke outer scope → final `failedCount` include R2 + Drive
+  - Pesan completion disamakan ke bahasa Inggris
+  - `WidgetRef` dihapus dari field `CopyController` → di-pass per method
+  - `ScanLimits` → `abstract final class` (Dart 3+ idiom, tidak bisa di-instantiate)
+  - Tracking file berbasis nama → path identity (anti-collision)
+  - `currentFilePath` ditambahkan ke `CopyProgress` untuk tracking akurat
 
 ---
 
