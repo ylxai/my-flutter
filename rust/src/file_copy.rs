@@ -152,7 +152,7 @@ fn copy_buffered(src: &Path, dst: &Path) -> io::Result<u64> {
     let mut writer = BufWriter::with_capacity(BUFFER_SIZE, dst_file);
 
     let mut total: u64 = 0;
-    let mut buf = vec![0u8; BUFFER_SIZE];
+    let mut buf = [0u8; BUFFER_SIZE];
 
     loop {
         let n = reader.read(&mut buf)?;

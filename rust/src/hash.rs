@@ -37,7 +37,7 @@ fn compute_md5(path: &Path) -> io::Result<String> {
     let file = File::open(path)?;
     let mut reader = BufReader::with_capacity(HASH_BUFFER_SIZE, file);
     let mut hasher = Md5::new();
-    let mut buf = vec![0u8; HASH_BUFFER_SIZE];
+    let mut buf = [0u8; HASH_BUFFER_SIZE];
 
     loop {
         let n = reader.read(&mut buf)?;
@@ -54,7 +54,7 @@ fn compute_sha256(path: &Path) -> io::Result<String> {
     let file = File::open(path)?;
     let mut reader = BufReader::with_capacity(HASH_BUFFER_SIZE, file);
     let mut hasher = Sha256::new();
-    let mut buf = vec![0u8; HASH_BUFFER_SIZE];
+    let mut buf = [0u8; HASH_BUFFER_SIZE];
 
     loop {
         let n = reader.read(&mut buf)?;
