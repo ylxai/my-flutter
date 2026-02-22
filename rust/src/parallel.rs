@@ -6,7 +6,7 @@ use crossbeam_channel::Sender;
 use rayon::prelude::*;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Once};
+use std::sync::{Arc, Condvar, Mutex, Once};
 use std::time::Instant;
 
 use crate::file_copy::{self, FileCopyResult};
@@ -58,6 +58,45 @@ fn configure_global_pool(max_threads: usize) {
     });
 }
 
+#[derive(Debug)]
+struct PauseController {
+    paused: Mutex<bool>,
+    condvar: Condvar,
+}
+
+impl PauseController {
+    fn new() -> Self {
+        Self {
+            paused: Mutex::new(false),
+            condvar: Condvar::new(),
+        }
+    }
+
+    fn sync_from_flag(&self, pause_flag: &AtomicBool) {
+        let mut paused = self
+            .paused
+            .lock()
+            .expect("PauseController mutex poisoned");
+        *paused = pause_flag.load(Ordering::SeqCst);
+        if !*paused {
+            self.condvar.notify_all();
+        }
+    }
+
+    fn wait_while_paused(&self, cancel_flag: &AtomicBool) {
+        let mut paused = self
+            .paused
+            .lock()
+            .expect("PauseController mutex poisoned");
+        while *paused && !cancel_flag.load(Ordering::SeqCst) {
+            paused = self
+                .condvar
+                .wait(paused)
+                .expect("PauseController wait failed");
+        }
+    }
+}
+
 /// Copy files in parallel with progress reporting
 pub fn copy_files_parallel(
     files: Vec<FileEntry>,
@@ -76,6 +115,7 @@ pub fn copy_files_parallel(
     let bytes_copied = Arc::new(AtomicU64::new(0));
     let skipped = Arc::new(AtomicU64::new(0));
     let failed = Arc::new(AtomicU64::new(0));
+    let pause_controller = Arc::new(PauseController::new());
 
     configure_global_pool(max_threads);
 
@@ -83,7 +123,7 @@ pub fn copy_files_parallel(
         .par_iter()
         .map(|entry| {
             // Check cancellation
-            if cancel_flag.load(Ordering::Relaxed) {
+            if cancel_flag.load(Ordering::SeqCst) {
                 return FileCopyResult {
                     source_path: entry.source_path.clone(),
                     dest_path: entry.dest_path.clone(),
@@ -97,13 +137,8 @@ pub fn copy_files_parallel(
                 };
             }
 
-            // Wait while paused
-            while pause_flag.load(Ordering::Relaxed) {
-                if cancel_flag.load(Ordering::Relaxed) {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
+            pause_controller.sync_from_flag(&pause_flag);
+            pause_controller.wait_while_paused(&cancel_flag);
 
             let src = Path::new(&entry.source_path);
             let dst = Path::new(&entry.dest_path);

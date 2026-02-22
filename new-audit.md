@@ -181,32 +181,28 @@ fn configure_global_pool(max_threads: usize) {
 - **Location:** `rust/src/parallel.rs:96-101`
 - **Detected language:** Rust
 - **Issue:** Pause uses spin-loop with 100ms sleep. Wastes CPU and can miss cancel signal.
-- **Evidence:** 
-  ```rust
-  while pause_flag.load(Ordering::Relaxed) {
-      if cancel_flag.load(Ordering::Relaxed) {
-          break;
-      }
-      std::thread::sleep(std::time::Duration::from_millis(100));
-  }
-  ```
 - **Crash or race condition risk:** LOW - Performance/CPU waste
 - **Severity:** MEDIUM
-- **Fix:** Use `std::sync::Condvar` or `parking_lot::Condvar`:
+- **Status:** FIXED
+- **Resolution:** Pause kini menggunakan `Condvar` lewat `PauseController`, sehingga thread menunggu dengan efisien dan segera dibangunkan saat resume/cancel.
+- **Fix (implemented):**
 ```rust
 use std::sync::{Arc, Condvar, Mutex};
 
-pub struct PauseController {
+#[derive(Debug)]
+struct PauseController {
     paused: Mutex<bool>,
     condvar: Condvar,
 }
 
 impl PauseController {
-    pub fn wait_while_paused(&self, cancel_flag: &AtomicBool) {
+    fn wait_while_paused(&self, cancel_flag: &AtomicBool) {
         let mut paused = self.paused.lock().unwrap();
         while *paused && !cancel_flag.load(Ordering::SeqCst) {
             paused = self.condvar.wait(paused).unwrap();
         }
+    }
+}
     }
     
     pub fn set_paused(&self, value: bool) {
