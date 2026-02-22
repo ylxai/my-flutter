@@ -1,11 +1,45 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 
 import '../models/file_item.dart';
 import '../models/copy_result.dart';
 import '../models/performance_settings.dart';
+
+/// Thread-safe work queue untuk parallel copy.
+///
+/// Dart berjalan di single-threaded event loop, namun akses [ListQueue]
+/// dari multiple `async` workers tetap bisa menghasilkan race condition
+/// karena setiap `await` memberi kesempatan worker lain berjalan.
+///
+/// Solusi: gunakan integer index atomik yang di-increment sekali per
+/// item — operasi `_nextIndex++` bersifat atomic di Dart event loop
+/// sehingga tidak ada dua worker yang mendapat index yang sama.
+class _AtomicWorkQueue {
+  final List<FileItem> _items;
+  int _nextIndex = 0;
+
+  _AtomicWorkQueue(List<FileItem> items) : _items = List.unmodifiable(items);
+
+  /// Ambil item berikutnya. Mengembalikan `null` jika queue sudah habis.
+  /// Operasi ini atomic di Dart event loop — tidak ada await di antara
+  /// pembacaan dan increment [_nextIndex].
+  FileItem? dequeue() {
+    if (_nextIndex >= _items.length) return null;
+    return _items[_nextIndex++];
+  }
+
+  bool get isEmpty => _nextIndex >= _items.length;
+}
+
+/// Shared mutable counter yang aman diakses dari multiple async workers
+/// di Dart single-threaded event loop. Setiap increment adalah atomic
+/// karena tidak ada `await` di dalam operasi increment.
+class _SafeCounter {
+  int _value = 0;
+  int get value => _value;
+  void increment([int by = 1]) => _value += by;
+}
 
 /// Service for file operations - validation, copy, and scanning.
 /// Supports pause, resume, and cancel during copy.
@@ -203,26 +237,37 @@ class FileOperationService {
           }
         },
       );
-      final queue = ListQueue<FileItem>.from(files);
+
+      // ✅ FIX P0-1: Gunakan _AtomicWorkQueue (index-based) dan _SafeCounter
+      // sebagai pengganti ListQueue + shared int variables.
+      // Operasi dequeue() dan counter.increment() tidak mengandung await
+      // sehingga bersifat atomic di Dart single-threaded event loop —
+      // tidak ada dua worker yang bisa mengambil item yang sama.
+      final workQueue = _AtomicWorkQueue(files);
+      final processedCounter = _SafeCounter();
+      final bytesCounter = _SafeCounter();
+      final skippedCounter = _SafeCounter();
+      final failedCounter = _SafeCounter();
 
       Future<void> worker() async {
         while (true) {
           if (_isCancelled) return;
-          if (queue.isEmpty) return;
 
-          final file = queue.removeFirst();
+          // dequeue() adalah atomic: baca + increment index tanpa await
+          final file = workQueue.dequeue();
+          if (file == null) return; // queue habis, worker selesai
 
           if (_isPaused) {
             controller.add(
               _makeProgress(
                 files.length,
-                processedFiles,
+                processedCounter.value,
                 '⏸ Paused',
-                bytesCopied,
+                bytesCounter.value,
                 totalBytes,
                 startTime,
-                skippedCount,
-                failedCount,
+                skippedCounter.value,
+                failedCounter.value,
               ),
             );
             await _pauseCompleter?.future;
@@ -243,41 +288,44 @@ class FileOperationService {
 
           try {
             if (skipExisting && _shouldSkipExisting(file, destPath)) {
-              skippedCount++;
-              processedFiles++;
+              // increment() atomic: tidak ada await di dalamnya
+              skippedCounter.increment();
+              processedCounter.increment();
               controller.add(
                 _makeProgress(
                   files.length,
-                  processedFiles,
+                  processedCounter.value,
                   file.name,
-                  bytesCopied,
+                  bytesCounter.value,
                   totalBytes,
                   startTime,
-                  skippedCount,
-                  failedCount,
+                  skippedCounter.value,
+                  failedCounter.value,
                 ),
               );
               continue;
             }
 
             await File(file.path).copy(destPath);
-            bytesCopied += file.size;
+            // increment setelah await selesai — masih atomic karena
+            // tidak ada await lain di antara operasi increment
+            bytesCounter.increment(file.size);
           } catch (e) {
-            failedCount++;
+            failedCounter.increment();
           }
 
-          processedFiles++;
+          processedCounter.increment();
 
           controller.add(
             _makeProgress(
               files.length,
-              processedFiles,
+              processedCounter.value,
               file.name,
-              bytesCopied,
+              bytesCounter.value,
               totalBytes,
               startTime,
-              skippedCount,
-              failedCount,
+              skippedCounter.value,
+              failedCounter.value,
             ),
           );
         }
@@ -289,13 +337,13 @@ class FileOperationService {
           controller.add(
             _makeProgress(
               files.length,
-              processedFiles,
+              processedCounter.value,
               'Cancelled',
-              bytesCopied,
+              bytesCounter.value,
               totalBytes,
               startTime,
-              skippedCount,
-              failedCount,
+              skippedCounter.value,
+              failedCounter.value,
             ),
           );
         }
