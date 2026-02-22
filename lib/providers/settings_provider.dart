@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/file_constants.dart';
 import '../models/cloud_account.dart';
 import '../models/performance_settings.dart';
 
@@ -22,20 +23,10 @@ class SettingsState {
 
   const SettingsState({
     this.themeMode = ThemeMode.dark,
-    this.rawExtensions = const [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'raf',
-      'orf',
-      'rw2',
-      'dng',
-      'raw',
-      'pef',
-      'srw',
-    ],
-    this.jpgExtensions = const ['jpg', 'jpeg'],
+    // ✅ FIX P0-3: Gunakan konstanta terpusat dari file_constants.dart
+    // sebagai single source of truth untuk ekstensi file.
+    this.rawExtensions = kRawExtensions,
+    this.jpgExtensions = kJpgExtensions,
     this.skipExistingFiles = true,
     this.duplicateHandling = DuplicateHandling.skip,
     this.copyMode = CopyMode.ultraFast,

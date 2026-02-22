@@ -19,11 +19,18 @@
   - Tambah dokumentasi provider `fileOperationServiceProvider` agar intent jelas
   - `dart analyze` → No issues found
 
-- [ ] **P0-3** — Ekstensi file terdefinisi di banyak tempat (duplikat konstanta)
-  - Fix: Centralize ke 1 file konstanta (`lib/constants/file_constants.dart`)
+- [x] **P0-3** — Ekstensi file terdefinisi di banyak tempat (duplikat konstanta) ✅ SELESAI
+  - Buat `lib/constants/file_constants.dart` sebagai single source of truth
+  - `kRawExtensions`, `kJpgExtensions`, `kExtraImageExtensions`, `kCopyExtensions`, `kScanExtensions`
+  - Update `file_item.dart`, `file_operation_service.dart`, `settings_provider.dart` pakai konstanta terpusat
+  - `dart analyze` → No issues found
 
-- [ ] **P0-4** — Directory scan tak terbatas tanpa max depth / max files / timeout
-  - Fix: Tambahkan batas scan yang aman
+- [x] **P0-4** — Directory scan tak terbatas tanpa max depth / max files / timeout ✅ SELESAI
+  - Tambah class `ScanLimits` di `file_constants.dart` (maxDepth=10, maxFiles=50000, timeoutSeconds=60)
+  - Ganti `listSync(recursive: true)` dengan rekursif manual berbatas depth di `scanFolder` dan `validateFiles`
+  - Tambah try/catch per-direktori untuk skip folder yang tidak bisa diakses (permission denied)
+  - Tambah try/catch per-file untuk skip file yang tidak bisa dibaca stat-nya
+  - `dart analyze` → No issues found
 
 ---
 
@@ -57,6 +64,8 @@
 
 - **P0-1** — Race condition parallel copy queue → `_AtomicWorkQueue` + `_SafeCounter`
 - **P0-2** — `CopyResult` field kosong + `startTime` salah hitung → tracking per-file + `startTime` direkam di awal
+- **P0-3** — Duplikat ekstensi file → `lib/constants/file_constants.dart` sebagai single source of truth
+- **P0-4** — Scan tak terbatas → rekursif manual dengan `ScanLimits` (maxDepth + maxFiles + error handling)
 
 ---
 
@@ -66,3 +75,5 @@
 |---------|------|------------|
 | 2026-02-22 | P0-1 | Fix race condition `ListQueue` → `_AtomicWorkQueue` + `_SafeCounter`, dart analyze clean |
 | 2026-02-22 | P0-2 | Fix `CopyResult` kosong, fix `startTime` salah, tambah tracking skipped/failed per-file, dart analyze clean |
+| 2026-02-22 | P0-3 | Buat `file_constants.dart`, centralize semua ekstensi, dart analyze clean |
+| 2026-02-22 | P0-4 | Fix scan tak terbatas → rekursif manual + ScanLimits + error handling, dart analyze clean |

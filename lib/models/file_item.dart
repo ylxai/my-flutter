@@ -1,3 +1,5 @@
+import '../constants/file_constants.dart';
+
 /// File item model — represents a single file for copy operations
 class FileItem {
   final String path;
@@ -21,26 +23,19 @@ class FileItem {
     return dot >= 0 ? name.substring(dot + 1).toLowerCase() : '';
   }
 
-  bool get isRaw => const [
-    'cr2',
-    'cr3',
-    'nef',
-    'arw',
-    'raf',
-    'orf',
-    'rw2',
-    'dng',
-    'raw',
-    'pef',
-    'srw',
-  ].contains(extension);
+  /// Apakah file ini termasuk format RAW camera.
+  /// Mengacu ke [kRawExtensions] sebagai single source of truth.
+  bool get isRaw => kRawExtensions.contains(extension);
 
-  bool get isJpg => const ['jpg', 'jpeg'].contains(extension);
+  /// Apakah file ini termasuk format JPEG.
+  /// Mengacu ke [kJpgExtensions] sebagai single source of truth.
+  bool get isJpg => kJpgExtensions.contains(extension);
 
+  /// Apakah file ini termasuk semua format gambar yang didukung.
   bool get isImage =>
-      isRaw ||
-      isJpg ||
-      const ['png', 'tiff', 'bmp', 'webp'].contains(extension);
+      kRawExtensions.contains(extension) ||
+      kJpgExtensions.contains(extension) ||
+      kExtraImageExtensions.contains(extension);
 
   String get formattedSize => formatFileSize(size);
 

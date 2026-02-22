@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
+import '../constants/file_constants.dart';
 import '../models/file_item.dart';
 import '../models/copy_result.dart';
 import '../models/performance_settings.dart';
@@ -93,25 +94,17 @@ class FileOperationService {
 
   // ── Validation ──
 
-  /// Validate files exist in source folder and match by name
+  /// Validate files exist in source folder and match by name.
+  ///
+  /// Menggunakan [kCopyExtensions] dari [file_constants.dart] sebagai default
+  /// sehingga tidak ada duplikasi daftar ekstensi di berbagai tempat.
+  ///
+  /// Scan dibatasi oleh [ScanLimits.maxDepth] dan [ScanLimits.maxFiles]
+  /// untuk mencegah hang jika user memilih folder sistem / drive root.
   Future<ValidationResult> validateFiles({
     required String sourceFolder,
     required List<String> fileNames,
-    List<String> extensions = const [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'raf',
-      'orf',
-      'rw2',
-      'dng',
-      'raw',
-      'pef',
-      'srw',
-      'jpg',
-      'jpeg',
-    ],
+    List<String> extensions = kCopyExtensions,
   }) async {
     return Isolate.run(() {
       final dir = Directory(sourceFolder);
@@ -132,21 +125,41 @@ class FileOperationService {
         }
       }
 
-      // Scan all files in source folder
+      // ✅ FIX P0-4: Scan dengan batas depth dan jumlah file maksimum.
+      // Mencegah hang / OOM jika folder sangat dalam atau sangat besar.
       final allFiles = <String, List<File>>{};
-      for (final entity in dir.listSync(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          final name = _fileNameWithoutExt(entity.path).toLowerCase();
-          if (!requestedNames.contains(name)) {
-            continue;
+      var scannedCount = 0;
+
+      void scanDir(Directory current, int depth) {
+        if (depth > ScanLimits.maxDepth) return;
+        if (scannedCount >= ScanLimits.maxFiles) return;
+
+        final List<FileSystemEntity> entities;
+        try {
+          entities = current.listSync(recursive: false, followLinks: false);
+        } catch (_) {
+          return; // Skip direktori yang tidak bisa diakses (permission denied)
+        }
+
+        for (final entity in entities) {
+          if (scannedCount >= ScanLimits.maxFiles) return;
+
+          if (entity is Directory) {
+            scanDir(entity, depth + 1);
+          } else if (entity is File) {
+            final name = _fileNameWithoutExt(entity.path).toLowerCase();
+            if (!requestedNames.contains(name)) continue;
+
+            final ext = _fileExtension(entity.path).toLowerCase();
+            if (!normalizedExt.contains(ext)) continue;
+
+            allFiles.putIfAbsent(name, () => []).add(entity);
+            scannedCount++;
           }
-          final ext = _fileExtension(entity.path).toLowerCase();
-          if (!normalizedExt.contains(ext)) {
-            continue;
-          }
-          allFiles.putIfAbsent(name, () => []).add(entity);
         }
       }
+
+      scanDir(dir, 0);
 
       final validFiles = <FileItem>[];
       final invalidFiles = <InvalidFileItem>[];
@@ -468,52 +481,67 @@ class FileOperationService {
 
   // ── Folder Scanning ──
 
-  /// Scan a folder for all image files
+  /// Scan a folder for all image files.
+  ///
+  /// Menggunakan [kScanExtensions] dari [file_constants.dart] sebagai default.
+  ///
+  /// ✅ FIX P0-3 + P0-4: Pakai konstanta terpusat + batas scan aman.
+  /// Scan dibatasi [ScanLimits.maxDepth] level kedalaman dan
+  /// [ScanLimits.maxFiles] jumlah file untuk mencegah hang pada folder besar.
+  /// Symlink tidak di-follow untuk mencegah infinite loop.
   Future<List<FileItem>> scanFolder(
     String folderPath, {
-    List<String> extensions = const [
-      'cr2',
-      'cr3',
-      'nef',
-      'arw',
-      'raf',
-      'orf',
-      'rw2',
-      'dng',
-      'raw',
-      'pef',
-      'srw',
-      'jpg',
-      'jpeg',
-      'png',
-    ],
+    List<String> extensions = kScanExtensions,
   }) async {
     return Isolate.run(() {
       final dir = Directory(folderPath);
       if (!dir.existsSync()) return <FileItem>[];
 
+      final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
       final results = <FileItem>[];
 
-      final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
+      // Rekursif manual dengan batas depth dan jumlah file.
+      // Tidak menggunakan listSync(recursive: true) karena tidak bisa
+      // dibatasi depth-nya dan bisa hang pada folder sistem.
+      void scanDir(Directory current, int depth) {
+        if (depth > ScanLimits.maxDepth) return;
+        if (results.length >= ScanLimits.maxFiles) return;
 
-      for (final entity in dir.listSync(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          final ext = _fileExtension(entity.path).toLowerCase();
-          if (normalizedExt.contains(ext)) {
-            final stat = entity.statSync();
-            results.add(
-              FileItem(
-                path: entity.path,
-                name: _fileName(entity.path),
-                size: stat.size,
-                createdDate: stat.changed,
-                modifiedDate: stat.modified,
-              ),
-            );
+        final List<FileSystemEntity> entities;
+        try {
+          entities = current.listSync(recursive: false, followLinks: false);
+        } catch (_) {
+          return; // Skip folder yang tidak bisa diakses (permission denied)
+        }
+
+        for (final entity in entities) {
+          if (results.length >= ScanLimits.maxFiles) return;
+
+          if (entity is Directory) {
+            scanDir(entity, depth + 1);
+          } else if (entity is File) {
+            final ext = _fileExtension(entity.path).toLowerCase();
+            if (!normalizedExt.contains(ext)) continue;
+
+            try {
+              final stat = entity.statSync();
+              results.add(
+                FileItem(
+                  path: entity.path,
+                  name: _fileName(entity.path),
+                  size: stat.size,
+                  createdDate: stat.changed,
+                  modifiedDate: stat.modified,
+                ),
+              );
+            } catch (_) {
+              // Skip file yang tidak bisa dibaca stat-nya
+            }
           }
         }
       }
 
+      scanDir(dir, 0);
       return results;
     });
   }
