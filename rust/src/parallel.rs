@@ -73,10 +73,7 @@ impl PauseController {
     }
 
     fn sync_from_flag(&self, pause_flag: &AtomicBool) {
-        let mut paused = self
-            .paused
-            .lock()
-            .expect("PauseController mutex poisoned");
+        let mut paused = self.paused.lock().expect("PauseController mutex poisoned");
         *paused = pause_flag.load(Ordering::SeqCst);
         if !*paused {
             self.condvar.notify_all();
@@ -84,10 +81,7 @@ impl PauseController {
     }
 
     fn wait_while_paused(&self, cancel_flag: &AtomicBool) {
-        let mut paused = self
-            .paused
-            .lock()
-            .expect("PauseController mutex poisoned");
+        let mut paused = self.paused.lock().expect("PauseController mutex poisoned");
         while *paused && !cancel_flag.load(Ordering::SeqCst) {
             paused = self
                 .condvar

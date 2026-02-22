@@ -1,7 +1,7 @@
 //! File integrity verification via hashing (MD5, SHA256)
 
-use md5::{Md5, Digest as Md5Digest};
-use sha2::{Sha256, Digest as Sha256Digest};
+use md5::{Digest as Md5Digest, Md5};
+use sha2::{Digest as Sha256Digest, Sha256};
 use std::fs::File;
 use std::io::{self, BufReader, Read};
 use std::path::Path;
@@ -23,11 +23,7 @@ pub fn compute_hash(path: &Path, algorithm: &HashAlgorithm) -> io::Result<String
 }
 
 /// Verify two files are identical by comparing hashes
-pub fn verify_files_match(
-    src: &Path,
-    dst: &Path,
-    algorithm: &HashAlgorithm,
-) -> io::Result<bool> {
+pub fn verify_files_match(src: &Path, dst: &Path, algorithm: &HashAlgorithm) -> io::Result<bool> {
     let src_hash = compute_hash(src, algorithm)?;
     let dst_hash = compute_hash(dst, algorithm)?;
     Ok(src_hash == dst_hash)

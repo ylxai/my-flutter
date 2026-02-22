@@ -44,16 +44,8 @@ pub fn copy_file_range_copy(src: &Path, dst: &Path) -> io::Result<u64> {
         let mut off_in = total_copied as i64;
         let mut off_out = total_copied as i64;
 
-        let copied = unsafe {
-            libc::copy_file_range(
-                src_fd,
-                &mut off_in,
-                dst_fd,
-                &mut off_out,
-                to_copy,
-                0,
-            )
-        };
+        let copied =
+            unsafe { libc::copy_file_range(src_fd, &mut off_in, dst_fd, &mut off_out, to_copy, 0) };
 
         if copied < 0 {
             return Err(io::Error::last_os_error());
@@ -85,4 +77,3 @@ pub fn fallocate_file(path: &Path, size: u64) -> io::Result<()> {
 
     Ok(())
 }
-

@@ -17,14 +17,8 @@ pub fn copy_file_win32(src: &Path, dst: &Path) -> io::Result<u64> {
         fs::create_dir_all(parent)?;
     }
 
-    let src_wide: Vec<u16> = OsStr::new(src)
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
-    let dst_wide: Vec<u16> = OsStr::new(dst)
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
+    let src_wide: Vec<u16> = OsStr::new(src).encode_wide().chain(Some(0)).collect();
+    let dst_wide: Vec<u16> = OsStr::new(dst).encode_wide().chain(Some(0)).collect();
 
     unsafe {
         let success = CopyFileExW(
