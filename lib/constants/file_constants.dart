@@ -45,14 +45,15 @@ const List<String> kScanExtensions = [
 ///
 /// Gunakan [abstract final class] agar tidak bisa di-instantiate secara
 /// tidak sengaja — semua member adalah static const.
+///
+/// Hard stop dilakukan di dalam Isolate via [maxDepth] + [maxFiles].
+/// Tidak ada timeout eksternal — Isolate berjalan di memori terpisah
+/// sehingga `.timeout()` tidak bisa menghentikannya secara efektif.
 abstract final class ScanLimits {
   /// Kedalaman direktori maksimum yang akan di-scan secara rekursif.
-  /// Contoh: depth 5 artinya folder/a/b/c/d/e sudah merupakan level terdalam.
+  /// Contoh: depth 10 artinya folder/a/b/c/d/e/f/g/h/i/j adalah level terdalam.
   static const int maxDepth = 10;
 
   /// Jumlah file maksimum yang dikembalikan dalam satu operasi scan.
   static const int maxFiles = 50000;
-
-  /// Timeout maksimum untuk operasi scan (dalam detik).
-  static const int timeoutSeconds = 60;
 }

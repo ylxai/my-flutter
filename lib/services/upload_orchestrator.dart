@@ -508,6 +508,8 @@ class UploadOrchestrator {
     required Future<T> Function() action,
     required bool Function(Object error) isRetryable,
   }) async {
+    // Loop selalu rethrow di iterasi terakhir (canRetry = false),
+    // sehingga baris setelah loop tidak pernah dicapai.
     for (var attempt = 0; attempt <= _retryOptions.maxRetries; attempt++) {
       try {
         return await action();
@@ -520,19 +522,23 @@ class UploadOrchestrator {
         await Future.delayed(delay);
       }
     }
-    throw StateError('Retry failed');
+    // Unreachable — loop selalu rethrow sebelum sampai sini.
+    // Diperlukan hanya agar Dart compiler puas dengan return type T.
+    throw StateError('Unreachable: all retry attempts exhausted via rethrow');
   }
 
   Duration _retryDelay(int attempt) {
     final baseMs = _retryOptions.baseDelay.inMilliseconds.toDouble();
+    final maxMs = _retryOptions.maxDelay.inMilliseconds.toDouble();
     final raw = baseMs * pow(_retryOptions.backoffFactor, attempt - 1);
-    final capped = raw.clamp(
-      baseMs,
-      _retryOptions.maxDelay.inMilliseconds.toDouble(),
-    );
+    final capped = raw.clamp(baseMs, maxMs);
+
+    // Jitter simetris: ±jitterRatio dari capped delay.
+    // ✅ FIX: Clamp ke [0, maxMs] agar tidak pernah negatif atau melebihi max.
+    // Sebelumnya: (capped + delta).round() bisa negatif jika delta > capped.
     final jitter = capped * _retryOptions.jitterRatio;
     final delta = (Random().nextDouble() * jitter * 2) - jitter;
-    final ms = (capped + delta).round();
+    final ms = (capped + delta).clamp(0.0, maxMs).round();
     return Duration(milliseconds: ms);
   }
 

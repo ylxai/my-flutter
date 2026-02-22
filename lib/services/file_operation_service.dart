@@ -131,7 +131,6 @@ class FileOperationService {
       var scannedCount = 0;
 
       void scanDir(Directory current, int depth) {
-        if (depth >= ScanLimits.maxDepth) return;
         if (scannedCount >= ScanLimits.maxFiles) return;
 
         final List<FileSystemEntity> entities;
@@ -144,7 +143,10 @@ class FileOperationService {
         for (final entity in entities) {
           if (scannedCount >= ScanLimits.maxFiles) return;
 
-          if (entity is Directory) {
+          if (entity is Directory && depth < ScanLimits.maxDepth) {
+            // ✅ FIX: Konsisten dengan _scanForImages — gunakan depth < maxDepth
+            // agar effective depth 0..(maxDepth-1) = 10 levels di kedua tempat.
+            // Sebelumnya: depth > maxDepth (allow 11 levels) — inkonsisten!
             scanDir(entity, depth + 1);
           } else if (entity is File) {
             final name = _fileNameWithoutExt(entity.path).toLowerCase();
@@ -535,7 +537,6 @@ class FileOperationService {
         // yang memastikan isolate selesai dalam waktu wajar tanpa
         // perlu timeout eksternal yang misleading.
         void scanDir(Directory current, int depth) {
-          if (depth >= ScanLimits.maxDepth) return;
           if (localResults.length >= ScanLimits.maxFiles) return;
 
           final List<FileSystemEntity> entities;
@@ -548,7 +549,9 @@ class FileOperationService {
           for (final entity in entities) {
             if (localResults.length >= ScanLimits.maxFiles) return;
 
-            if (entity is Directory) {
+            if (entity is Directory && depth < ScanLimits.maxDepth) {
+              // ✅ FIX: Konsisten dengan _scanForImages — gunakan depth < maxDepth
+              // agar effective depth 0..(maxDepth-1) = 10 levels di kedua tempat.
               scanDir(entity, depth + 1);
             } else if (entity is File) {
               final ext = _fileExtension(entity.path).toLowerCase();

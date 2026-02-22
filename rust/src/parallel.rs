@@ -73,7 +73,14 @@ impl PauseController {
     }
 
     fn sync_from_flag(&self, pause_flag: &AtomicBool) {
-        let mut paused = self.paused.lock().expect("PauseController mutex poisoned");
+        // ✅ FIX: Ganti .expect() dengan match — jika mutex poisoned (thread lain
+        // panic saat hold mutex), recover dengan call notify_all agar worker tidak
+        // hang selamanya. Poison terjadi jika rayon worker panic di tengah copy.
+        let Ok(mut paused) = self.paused.lock() else {
+            // Mutex poisoned — reset condvar agar worker lain tidak deadlock
+            self.condvar.notify_all();
+            return;
+        };
         *paused = pause_flag.load(Ordering::SeqCst);
         if !*paused {
             self.condvar.notify_all();
@@ -81,12 +88,21 @@ impl PauseController {
     }
 
     fn wait_while_paused(&self, cancel_flag: &AtomicBool) {
-        let mut paused = self.paused.lock().expect("PauseController mutex poisoned");
+        // ✅ FIX: Jika mutex poisoned, return langsung agar worker melanjutkan
+        // (lebih aman daripada panic yang menghentikan seluruh rayon pool).
+        let Ok(mut paused) = self.paused.lock() else {
+            return; // Mutex poisoned — skip wait, lanjutkan copy
+        };
         while *paused && !cancel_flag.load(Ordering::SeqCst) {
-            paused = self
-                .condvar
-                .wait(paused)
-                .expect("PauseController wait failed");
+            paused = match self.condvar.wait(paused) {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    // Recover dari mutex poison — bind ke _guard agar tidak
+                    // langsung di-drop (Rust lint: non-binding let on lock)
+                    let _guard = poisoned.into_inner();
+                    return;
+                }
+            };
         }
     }
 }
