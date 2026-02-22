@@ -21,6 +21,8 @@ class GalleryPage extends ConsumerStatefulWidget {
 }
 
 class _GalleryPageState extends ConsumerState<GalleryPage> {
+  ProviderSubscription<String>? _sourceFolderSub;
+
   @override
   void initState() {
     super.initState();
@@ -28,14 +30,20 @@ class _GalleryPageState extends ConsumerState<GalleryPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _autoScan();
     });
-    ref.listen<String>(copyProvider.select((s) => s.sourceFolder), (
-      previous,
-      next,
-    ) {
-      if (next.isNotEmpty && next != previous) {
-        _scanFolder(next);
-      }
-    });
+    _sourceFolderSub = ref.listenManual<String>(
+      copyProvider.select((s) => s.sourceFolder),
+      (previous, next) {
+        if (next.isNotEmpty && next != previous) {
+          _scanFolder(next);
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _sourceFolderSub?.close();
+    super.dispose();
   }
 
   void _autoScan() {

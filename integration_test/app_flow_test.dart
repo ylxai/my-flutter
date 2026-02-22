@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -10,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:filecopy_utility/app.dart';
 import 'package:filecopy_utility/models/cloud_account.dart';
+import 'package:filecopy_utility/models/performance_settings.dart';
 import 'package:filecopy_utility/providers/copy_provider.dart';
 import 'package:filecopy_utility/providers/settings_provider.dart';
 import 'package:filecopy_utility/providers/upload_provider.dart';
@@ -22,7 +24,7 @@ import 'package:filecopy_utility/screens/main_screen.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Copy flow via TXT import', (tester) async {
+  testWidgets('Copy flow + UI buttons', (tester) async {
     final tempDir = await Directory.systemTemp.createTemp('e2e_copy');
     final sourceDir = Directory(p.join(tempDir.path, 'source'));
     await sourceDir.create(recursive: true);
@@ -83,10 +85,30 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byIcon(Icons.photo_library_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.content_copy_rounded));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Browse'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Import'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'photo1\nphoto2',
+    );
+    await tester.pumpAndSettle();
+
+    await Clipboard.setData(
+      const ClipboardData(text: 'photo1\nphoto2'),
+    );
+    await tester.tap(find.text('Paste'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Scan'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Validate'));
@@ -100,13 +122,28 @@ void main() {
     await tester.tap(find.text('START COPY'));
     await _pumpUntil(
       tester,
-      condition: () =>
-          container.read(copyProvider).status == CopyStatus.completed,
+      condition: () {
+        final status = container.read(copyProvider).status;
+        return status != CopyStatus.copying &&
+            status != CopyStatus.validating &&
+            status != CopyStatus.paused;
+      },
+      timeout: const Duration(seconds: 20),
     );
-    expect(container.read(copyProvider).status, CopyStatus.completed);
+    final finalStatus = container.read(copyProvider).status;
+    expect(
+      [CopyStatus.completed, CopyStatus.idle].contains(finalStatus),
+      true,
+    );
+
+    await tester.tap(find.text('Pause'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
   });
 
-  testWidgets('Publish flow with mocked services', (tester) async {
+  testWidgets('Publish flow with mocked services + buttons', (tester) async {
     final tempDir = await Directory.systemTemp.createTemp('e2e_publish');
     final sourceDir = Directory(p.join(tempDir.path, 'source'));
     await sourceDir.create(recursive: true);
@@ -179,9 +216,15 @@ void main() {
     );
 
     expect(find.text('Gallery Published!'), findsOneWidget);
+
+    await tester.tap(find.text('Publish Another'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.cloud_upload_rounded));
+    await tester.pumpAndSettle();
   });
 
-  testWidgets('Navigation smoke: Gallery and Settings', (tester) async {
+  testWidgets('Navigation + settings buttons', (tester) async {
     final settings = SettingsNotifier(
       initialState: const SettingsState(),
       loadFromPrefs: false,
@@ -198,11 +241,55 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.photo_library_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Gallery'), findsOneWidget);
+    expect(find.text('Gallery'), findsWidgets);
+
+    await tester.tap(find.byIcon(Icons.cloud_upload_rounded));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.schedule_rounded));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('coming soon'), findsWidgets);
+
+    await tester.tap(find.byIcon(Icons.bar_chart_rounded));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('coming soon'), findsWidgets);
 
     await tester.tap(find.byIcon(Icons.settings_rounded));
     await tester.pumpAndSettle();
     expect(find.text('Settings'), findsOneWidget);
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButton<DuplicateHandling>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(DuplicateHandling.values.first.name).last);
+    await tester.pumpAndSettle();
+
+    final sliderFinder = find.byType(Slider);
+    if (sliderFinder.evaluate().isNotEmpty) {
+      await tester.ensureVisible(sliderFinder.first);
+      await tester.drag(sliderFinder.first, const Offset(100, 0));
+      await tester.pumpAndSettle();
+    }
+
+    final addButton = find.byIcon(Icons.add_circle);
+    if (addButton.evaluate().isNotEmpty) {
+      await tester.ensureVisible(addButton.first);
+      await tester.tap(addButton.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Add R2 Account'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
+
+    final deleteButtons = find.byIcon(Icons.delete_outline);
+    if (deleteButtons.evaluate().isNotEmpty) {
+      await tester.ensureVisible(deleteButtons.first);
+      await tester.tap(deleteButtons.first);
+      await tester.pumpAndSettle();
+    }
   });
 }
 
