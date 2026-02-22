@@ -5,6 +5,8 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 use image::imageops::FilterType;
@@ -139,10 +141,18 @@ pub fn process_image(
 /// Output path per file:
 /// - thumbnail → `{output_dir}/thumbs/{stem}.webp`
 /// - preview   → `{output_dir}/previews/{stem}.webp`
+/// ✅ FIX #1: Tambah `cancel_flag` parameter agar user bisa menghentikan
+/// batch processing dari Flutter. Sebelumnya process_batch tidak pernah
+/// mengecek cancel — user harus menunggu SEMUA foto selesai diproses.
+///
+/// cancel_flag di-check di awal setiap file processing:
+/// - Jika true: kembalikan result dengan cancelled=true (skipped)
+/// - Jika false: proses normal
 pub fn process_batch(
     source_paths: &[PathBuf],
     output_dir: &Path,
     config: &ProcessConfig,
+    cancel_flag: &Arc<AtomicBool>,
 ) -> Vec<ImageProcessResult> {
     use rayon::prelude::*;
 
@@ -152,25 +162,34 @@ pub fn process_batch(
     let _ = fs::create_dir_all(&thumbs_dir);
     let _ = fs::create_dir_all(&previews_dir);
 
-    // ✅ FIX #5: Buat thread pool lokal dengan concurrency terbatas.
-    // num_cpus / 2 memberi ruang untuk IO dan main thread.
-    // Clamp ke 1..=4 agar tidak OOM di mesin RAM kecil maupun mesin besar.
-    //
-    // ✅ FIX kiloconnect: Hapus .expect() di fallback — jika pool gagal,
-    // jalankan langsung di thread saat ini (sequential) tanpa panic.
-    // ThreadPoolBuilder hanya gagal jika OS menolak thread baru (edge case
-    // ekstrem: resource limit), sehingga graceful fallback lebih aman.
     let num_threads = (num_cpus::get() / 2).clamp(1, 4);
     let pool_opt = rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
         .build()
         .ok();
 
-    // Closure yang berisi actual processing — bisa dijalankan di pool atau sequential
+    let cancel_flag = Arc::clone(cancel_flag);
+
     let process = || {
         source_paths
             .par_iter()
             .map(|src| {
+                // ✅ FIX #1: Cek cancel flag di awal setiap file
+                // Rayon tidak punya built-in cancellation — kita harus cek manual
+                if cancel_flag.load(Ordering::SeqCst) {
+                    let source_str = src.to_string_lossy().to_string();
+                    return ImageProcessResult {
+                        source_path: source_str,
+                        thumb_path: String::new(),
+                        preview_path: String::new(),
+                        thumb_size: 0,
+                        preview_size: 0,
+                        duration_ms: 0,
+                        success: false,
+                        error_message: "Cancelled".to_string(),
+                    };
+                }
+
                 let start = Instant::now();
                 let source_str = src.to_string_lossy().to_string();
 
@@ -179,8 +198,6 @@ pub fn process_batch(
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_else(|| "unknown".to_string());
 
-                // ✅ Gunakan decode_image() terpusat — tidak duplikasi logika
-                // Pass &start agar start tidak di-move, masih bisa dipakai di bawah
                 let img = match decode_image(src, &source_str, &start) {
                     Ok(img) => img,
                     Err(result) => return result,
@@ -224,8 +241,6 @@ pub fn process_batch(
             .collect()
     };
 
-    // Jalankan di pool lokal jika berhasil dibuat, otherwise fallback ke
-    // global rayon pool (yang sudah ada dan tidak bisa gagal di sini).
     match pool_opt {
         Some(pool) => pool.install(process),
         None => process(),

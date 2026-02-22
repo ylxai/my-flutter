@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import '../constants/file_constants.dart';
 import '../models/cloud_account.dart';
 import '../src/rust/api.dart' as rust;
+import '../utils/file_utils.dart';
 import 'r2_upload_service.dart';
 import 'google_drive_upload_service.dart';
 
@@ -116,18 +117,18 @@ class UploadOrchestrator {
       message: 'Scanning source folder...',
     );
 
-    // ✅ FIX kiloconnect WARNING-2: Scan langsung ke processable extensions saja
-    // (.jpg, .jpeg, .png) agar tidak misleading — RAW tidak akan di-scan
-    // lalu silently di-drop. "Found N files" sekarang akurat.
-    final processableExtensions = ['.jpg', '.jpeg', '.png'];
+    // ✅ FIX kiloconnect WARNING: Gunakan config.extensions dari user settings
+    // bukan hardcode ['.jpg', '.jpeg', '.png'].
+    // config.extensions sudah dibangun di publish_page.dart dari settings
+    // (rawExtensions + jpgExtensions + kExtraImageExtensions) sehingga
+    // menghormati preferensi user. Scan sekarang akurat sesuai settings.
     final scannedFiles = await _scanForImages(
       config.sourceFolder,
       recursive: config.recursiveScan,
-      extensions: processableExtensions,
+      extensions: config.extensions,
     );
     if (_isCancelled) return;
 
-    // imageFiles == scannedFiles karena scan sudah dibatasi ke processable ext
     final imageFiles = scannedFiles;
 
     yield UploadProgress(
@@ -333,33 +334,55 @@ class UploadOrchestrator {
           );
           return;
         }
-        // ✅ FIX P1-1: Continue-on-error untuk Drive upload juga.
-        // Gagal upload 1 file ke Drive tidak harus abort seluruh pipeline.
-        for (int i = 0; i < driveFiles.length; i++) {
+        // ✅ FIX #2: Ganti serial Drive upload dengan concurrent batch.
+        // Serial upload sangat lambat untuk 100+ foto originl.
+        // Gunakan pola yang sama dengan R2: Future.wait batch 3 paralel.
+        // Drive API rate limit lebih ketat dari R2, jadi gunakan batch 3 (bukan 5).
+        const int driveConcurrency = 3;
+        int uploadedDrive = 0;
+
+        for (var i = 0; i < driveFiles.length; i += driveConcurrency) {
           if (_isCancelled) return;
+
+          final batch = driveFiles.sublist(
+            i,
+            (i + driveConcurrency).clamp(0, driveFiles.length),
+          );
+
+          final batchResults = await Future.wait(
+            batch.map((file) async {
+              try {
+                await _withRetry(
+                  action: () => _driveService.uploadFile(
+                    filePath: file.path,
+                    folderId: folderId,
+                  ),
+                  isRetryable: _isRetryableDrive,
+                );
+                return (name: p.basename(file.path), success: true);
+              } catch (e) {
+                return (name: p.basename(file.path), success: false);
+              }
+            }),
+          );
+
+          for (final result in batchResults) {
+            if (result.success) {
+              uploadedDrive++;
+            } else {
+              driveFailedCount++;
+            }
+          }
 
           yield UploadProgress(
             phase: UploadPhase.uploadingToDrive,
-            currentFile: i + 1,
+            currentFile: uploadedDrive,
             totalFiles: driveFiles.length,
-            currentFileName: p.basename(driveFiles[i].path),
-            message: 'Uploading to Drive ${i + 1}/${driveFiles.length}...',
-            overallProgress: 0.7 + ((i + 1) / driveFiles.length) * 0.25,
+            message:
+                'Uploading to Drive $uploadedDrive/${driveFiles.length}...',
+            overallProgress: 0.7 + (uploadedDrive / driveFiles.length) * 0.25,
             failedCount: driveFailedCount,
           );
-
-          try {
-            await _withRetry(
-              action: () => _driveService.uploadFile(
-                filePath: driveFiles[i].path,
-                folderId: folderId,
-              ),
-              isRetryable: _isRetryableDrive,
-            );
-          } catch (e) {
-            // Catat error Drive tapi lanjutkan file berikutnya
-            driveFailedCount++;
-          }
         }
       }
 
@@ -432,55 +455,21 @@ class UploadOrchestrator {
 
   /// Scan folder untuk file gambar dengan batas keamanan dari [ScanLimits].
   ///
-  /// ✅ FIX reviewer: Ganti `listSync(recursive: true)` tak terbatas dengan
-  /// rekursif manual berbatas depth dan file count — konsisten dengan fix P0-4
-  /// yang diterapkan di `file_operation_service.dart`.
+  /// ✅ FIX #3 Refactor: Delegasi ke [FileUtils.scanDirSync] — satu implementasi
+  /// terpusat untuk semua scan logic. Tidak ada duplikasi dengan
+  /// [FileOperationService.scanFolder] dan [FileOperationService.validateFiles].
   Future<List<File>> _scanForImages(
     String folderPath, {
     required bool recursive,
     required List<String> extensions,
   }) {
+    final maxDepth = recursive ? ScanLimits.maxDepth : 0;
     return Isolate.run(() {
-      final dir = Directory(folderPath);
-      if (!dir.existsSync()) return <String>[];
-
-      final normalized = extensions
-          .map((e) => e.toLowerCase().replaceFirst('.', ''))
-          .toSet();
-
-      final paths = <String>[];
-      final maxDepth = recursive ? ScanLimits.maxDepth : 0;
-
-      void scanDir(Directory current, int depth) {
-        if (paths.length >= ScanLimits.maxFiles) return;
-
-        List<FileSystemEntity> entries;
-        try {
-          entries = current.listSync(followLinks: false);
-        } catch (_) {
-          return; // skip folder tanpa akses
-        }
-
-        for (final entry in entries) {
-          if (paths.length >= ScanLimits.maxFiles) return;
-          if (entry is File) {
-            final ext = p
-                .extension(entry.path)
-                .toLowerCase()
-                .replaceFirst('.', '');
-            if (normalized.contains(ext)) {
-              paths.add(entry.path);
-            }
-          } else if (entry is Directory && depth < maxDepth) {
-            // ✅ FIX kiloconnect: guard awal `depth > maxDepth` dihapus karena
-            // redundant — `depth < maxDepth` di sini sudah cukup sebagai gate.
-            // Konsisten dengan file_operation_service.dart yang allow depth == maxDepth.
-            scanDir(entry, depth + 1);
-          }
-        }
-      }
-
-      scanDir(dir, 0);
+      final paths = FileUtils.scanDirSync(
+        folderPath,
+        extensions: extensions,
+        maxDepth: maxDepth,
+      );
       paths.sort((a, b) => p.basename(a).compareTo(p.basename(b)));
       return paths;
     }).then((paths) => paths.map((path) => File(path)).toList());

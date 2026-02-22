@@ -535,7 +535,17 @@ fn process_images_for_upload_inner(
             return Vec::new();
         }
     };
-    let results = image_processing::process_batch(&paths, &out, &config);
+
+    // ✅ FIX #1: Pass cancel_flag dari CURRENT_OPERATION ke process_batch
+    // agar user bisa menghentikan image processing dari Flutter.
+    // Buat cancel_flag fresh jika tidak ada operasi aktif.
+    let cancel_flag = CURRENT_OPERATION
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|op| Arc::clone(&op.cancel)))
+        .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
+
+    let results = image_processing::process_batch(&paths, &out, &config, &cancel_flag);
 
     results
         .into_iter()
