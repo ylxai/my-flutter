@@ -36,14 +36,24 @@
 
 ## 🟠 P1 — PENTING (Selesaikan sebelum beta)
 
-- [ ] **P1-1** — Upload abort seluruh batch jika 1 file gagal (`upload_orchestrator.dart`)
-  - Fix: Implementasi continue-on-error, kumpulkan semua error
+- [x] **P1-1** — Upload abort seluruh batch jika 1 file gagal ✅ SELESAI
+  - Fix R2: continue-on-error, kumpulkan `r2Errors` + `r2FailedCount`, hanya abort jika SEMUA file gagal
+  - Fix Drive: continue-on-error, catat `driveFailedCount`, lanjutkan file berikutnya
+  - Manifest hanya berisi `successfulFiles` (bukan semua processedFiles)
+  - Hasil akhir `UploadProgress.completed` berisi `successCount` + `failedCount` yang akurat
+  - `dart analyze` → No issues found
 
-- [ ] **P1-2** — Google Drive query rentan injeksi (`google_drive_upload_service.dart`)
-  - Fix: Sanitasi input nama folder sebelum dipakai di query
+- [x] **P1-2** — Google Drive query rentan injeksi nama folder ✅ SELESAI
+  - Fix: Sanitasi `name` dengan escape `'` → `\'` dan `\` → `\\` sebelum dimasukkan ke query
+  - Mengikuti Drive API query escape specification
+  - `dart analyze` → No issues found
 
-- [ ] **P1-3** — Settings async load race condition (`settings_provider.dart`)
-  - Fix: Pastikan settings fully loaded sebelum digunakan provider lain
+- [x] **P1-3** — Settings async load race condition ✅ SELESAI
+  - Fix: Tambah flag `_isLoaded` + getter `isLoaded` di `SettingsNotifier`
+  - Tambah `settingsLoadedProvider` — provider bool yang jadi `true` setelah `_load()` selesai
+  - Wrap seluruh `_load()` dalam try/catch/finally — settings gagal load tidak crash app
+  - State default tetap valid (pakai `kRawExtensions`/`kJpgExtensions` dari `file_constants.dart`)
+  - `dart analyze` → No issues found
 
 ---
 
@@ -66,6 +76,9 @@
 - **P0-2** — `CopyResult` field kosong + `startTime` salah hitung → tracking per-file + `startTime` direkam di awal
 - **P0-3** — Duplikat ekstensi file → `lib/constants/file_constants.dart` sebagai single source of truth
 - **P0-4** — Scan tak terbatas → rekursif manual dengan `ScanLimits` (maxDepth + maxFiles + error handling)
+- **P1-1** — Upload abort on error → continue-on-error R2 + Drive, manifest hanya file sukses
+- **P1-2** — Drive query injection → escape `'` dan `\` sebelum query
+- **P1-3** — Settings race condition → `_isLoaded` flag + `settingsLoadedProvider` + try/catch/finally
 
 ---
 
@@ -77,3 +90,6 @@
 | 2026-02-22 | P0-2 | Fix `CopyResult` kosong, fix `startTime` salah, tambah tracking skipped/failed per-file, dart analyze clean |
 | 2026-02-22 | P0-3 | Buat `file_constants.dart`, centralize semua ekstensi, dart analyze clean |
 | 2026-02-22 | P0-4 | Fix scan tak terbatas → rekursif manual + ScanLimits + error handling, dart analyze clean |
+| 2026-02-22 | P1-1 | Continue-on-error R2 + Drive, manifest dari successfulFiles, successCount/failedCount akurat |
+| 2026-02-22 | P1-2 | Sanitasi nama folder Drive: escape single-quote dan backslash sebelum query |
+| 2026-02-22 | P1-3 | Tambah `_isLoaded` flag, `settingsLoadedProvider`, wrap `_load()` dengan try/catch/finally |

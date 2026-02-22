@@ -194,8 +194,13 @@ class UploadOrchestrator {
       );
 
       // Phase 3: Upload to R2
+      // ✅ FIX P1-1: Continue-on-error — jangan abort seluruh batch jika
+      // 1 file gagal. Kumpulkan semua error, lanjutkan file berikutnya.
       final eventSlug = _slugify(config.eventName);
       int uploadedR2 = 0;
+      int r2FailedCount = 0;
+      final r2Errors = <String>[];
+      final successfulFiles = <_ProcessedFile>[];
 
       for (final pf in processedFiles) {
         if (_isCancelled) return;
@@ -208,8 +213,10 @@ class UploadOrchestrator {
           currentFileName: '${pf.name}.webp',
           message: 'Uploading to R2 $uploadedR2/${totalFiles * 2}...',
           overallProgress: 0.3 + (uploadedR2 / (totalFiles * 2)) * 0.4,
+          failedCount: r2FailedCount,
         );
 
+        bool fileSuccess = true;
         try {
           // Upload thumbnail
           await _withRetry(
@@ -233,12 +240,26 @@ class UploadOrchestrator {
             isRetryable: _isRetryableR2,
           );
         } catch (e) {
-          yield UploadProgress(
-            phase: UploadPhase.error,
-            message: 'R2 upload failed: ${pf.name} ($e)',
-          );
-          return;
+          // Catat error tapi lanjutkan file berikutnya
+          r2FailedCount++;
+          fileSuccess = false;
+          r2Errors.add('${pf.name}: $e');
         }
+
+        if (fileSuccess) {
+          successfulFiles.add(pf);
+        }
+      }
+
+      // Jika semua file R2 gagal, baru hentikan pipeline
+      if (successfulFiles.isEmpty && totalFiles > 0) {
+        yield UploadProgress(
+          phase: UploadPhase.error,
+          message:
+              'R2 upload failed for all files. Errors: ${r2Errors.take(3).join('; ')}',
+          failedCount: r2FailedCount,
+        );
+        return;
       }
 
       // Phase 4: Upload originals to Google Drive (if enabled)
@@ -274,6 +295,9 @@ class UploadOrchestrator {
           );
           return;
         }
+        // ✅ FIX P1-1: Continue-on-error untuk Drive upload juga.
+        // Gagal upload 1 file ke Drive tidak harus abort seluruh pipeline.
+        int driveFailedCount = 0;
         for (int i = 0; i < driveFiles.length; i++) {
           if (_isCancelled) return;
 
@@ -284,6 +308,7 @@ class UploadOrchestrator {
             currentFileName: p.basename(driveFiles[i].path),
             message: 'Uploading to Drive ${i + 1}/${driveFiles.length}...',
             overallProgress: 0.7 + ((i + 1) / driveFiles.length) * 0.25,
+            failedCount: driveFailedCount,
           );
 
           try {
@@ -295,28 +320,28 @@ class UploadOrchestrator {
               isRetryable: _isRetryableDrive,
             );
           } catch (e) {
-            yield UploadProgress(
-              phase: UploadPhase.error,
-              message:
-                  'Drive upload failed: ${p.basename(driveFiles[i].path)} ($e)',
-            );
-            return;
+            // Catat error Drive tapi lanjutkan file berikutnya
+            driveFailedCount++;
           }
         }
       }
 
       // Phase 5: Generate and upload manifest
+      // ✅ FIX P1-1: Manifest hanya berisi file yang berhasil di-upload ke R2,
+      // bukan semua processedFiles (beberapa mungkin gagal upload).
       yield UploadProgress(
         phase: UploadPhase.generatingManifest,
         message: 'Generating manifest...',
         overallProgress: 0.95,
+        successCount: successfulFiles.length,
+        failedCount: r2FailedCount,
       );
 
       final manifest = GalleryManifest(
         eventName: config.eventName,
         createdAt: DateTime.now(),
-        totalPhotos: totalFiles,
-        photos: processedFiles
+        totalPhotos: successfulFiles.length,
+        photos: successfulFiles
             .map(
               (pf) => GalleryPhoto(
                 name: pf.name,
@@ -328,7 +353,6 @@ class UploadOrchestrator {
         driveFolderId: driveFolderId,
       );
 
-      // Upload manifest — URL not used yet but will be for result
       final manifestUrl = await _withRetry(
         action: () => _r2Service.uploadManifest(
           objectKey: '$eventSlug/manifest.json',
@@ -339,15 +363,20 @@ class UploadOrchestrator {
 
       stopwatch.stop();
 
+      // Pesan berbeda jika ada file yang gagal vs semua sukses
+      final completionMessage = r2FailedCount > 0
+          ? 'Upload selesai dengan $r2FailedCount file gagal.'
+          : 'Upload complete!';
+
       yield UploadProgress(
         phase: UploadPhase.completed,
         totalFiles: totalFiles,
         currentFile: totalFiles,
-        message: 'Upload complete!',
+        message: completionMessage,
         overallProgress: 1.0,
         galleryUrl: manifestUrl,
-        successCount: totalFiles,
-        failedCount: 0,
+        successCount: successfulFiles.length,
+        failedCount: r2FailedCount,
         totalDuration: stopwatch.elapsed,
       );
     } finally {
