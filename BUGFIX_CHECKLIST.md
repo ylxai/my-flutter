@@ -57,6 +57,24 @@
 
 ---
 
+## 🔵 CI/CD Fixes (PR #5 — fix/cicd-workflow)
+
+- [x] **CI-1** — Generate Rust Bridge SEBELUM analyze & test
+- [x] **CI-2** — Cache `frb_codegen` binary — tidak install ulang setiap run
+- [x] **CI-3** — Pisah 3 jobs: quality gate + build-linux + build-windows
+- [x] **CI-4** — Hapus redundant `rustup component add`
+- [x] **CI-5** — Hapus cache Flutter SDK manual yang conflict
+- [x] **CI-6** — Tambah `timeout-minutes` per job
+- [x] **CI-7** — Tambah `retention-days: 7` di artifacts
+- [x] **CI-8** — Fix `clippy -D warnings` — tambah `-A dead_code` + fix clippy errors
+- [x] **CI-9** — Tambah `cargo test --all` di quality gate
+- [x] **CI-10** — Tambah `flutter config --enable-linux-desktop` di Linux job
+- [x] **CI-11** — Pin Flutter version ke `3.41.0`
+- [x] **CI-12** — Env variables global untuk semua versi
+- [x] **CI-bonus** — `concurrency` group — auto-cancel run lama
+
+---
+
 ## 🔵 Post-Merge Fixes (Ditemukan saat review ulang)
 
 - [x] **PM-1** — Retry jitter bisa negatif → `clamp(0.0, maxMs)` di `_retryDelay`
