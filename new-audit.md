@@ -416,11 +416,13 @@ static String get _nativeLibDirectory {
 - **Location:** Build configuration
 - **Issue:** Rust doesn't guarantee stable ABI. Recompiling with different Rust version could break FFI compatibility.
 - **Risk:** LOW - Same Rust version used for Dart FFI generation
-- **Fix:** Document Rust version requirement with `rust-toolchain.toml`:
+- **Status:** FIXED
+- **Resolution:** Menambahkan `rust-toolchain.toml` untuk mengunci versi Rust yang digunakan build.
+- **Fix (implemented):**
 ```toml
 # rust-toolchain.toml
 [toolchain]
-channel = "1.75.0"
+channel = "1.93.0"
 components = ["rustfmt", "clippy"]
 ```
 
