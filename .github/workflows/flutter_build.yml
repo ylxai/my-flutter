@@ -79,7 +79,7 @@ jobs:
 
       - name: Rust clippy
         working-directory: rust
-        run: cargo +1.93.0 clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Analyze
         run: flutter analyze
@@ -165,11 +165,11 @@ jobs:
 
       - name: Rust fmt
         working-directory: rust
-        run: cargo +1.93.0 fmt --all -- --check
+        run: cargo fmt --all -- --check
 
       - name: Rust clippy
         working-directory: rust
-        run: cargo +1.93.0 clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings
 
       - name: Analyze
         run: flutter analyze
