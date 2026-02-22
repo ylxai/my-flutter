@@ -310,6 +310,7 @@ dependencies = [
  "md-5",
  "memmap2",
  "nix",
+ "num_cpus",
  "rayon",
  "sha2",
  "tokio",

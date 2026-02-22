@@ -514,82 +514,70 @@ class FileOperationService {
     String folderPath, {
     List<String> extensions = kScanExtensions,
   }) async {
-    // ✅ FIX kiloconnect review: enforce ScanLimits.timeoutSeconds agar
-    // tidak misleading — timeout sekarang benar-benar diterapkan via .timeout().
-    // Jika scan melebihi batas waktu, kembalikan hasil parsial yang sudah terkumpul
-    // daripada melempar exception — UX lebih baik untuk folder besar.
-    final results = <FileItem>[];
-
+    // ✅ FIX #2: Hapus .timeout() yang misleading.
+    // Isolate.run() berjalan di memori terpisah — .timeout() tidak bisa
+    // menghentikan isolate, hanya "abandon" (caller kembali dengan [])
+    // tapi isolate terus berjalan di background membuang CPU + RAM.
+    //
+    // Solusi yang benar: ScanLimits.maxFiles + ScanLimits.maxDepth sudah
+    // menjadi hard stop di dalam isolate — scan pasti selesai dalam waktu
+    // wajar tanpa perlu timeout eksternal. Ini lebih efisien dan jujur.
     try {
-      await Isolate.run(() {
-            final dir = Directory(folderPath);
-            if (!dir.existsSync()) return <FileItem>[];
+      return await Isolate.run(() {
+        final dir = Directory(folderPath);
+        if (!dir.existsSync()) return <FileItem>[];
 
-            final normalizedExt = extensions
-                .map((e) => e.toLowerCase())
-                .toSet();
-            final localResults = <FileItem>[];
+        final normalizedExt = extensions.map((e) => e.toLowerCase()).toSet();
+        final localResults = <FileItem>[];
 
-            // Rekursif manual dengan batas depth dan jumlah file.
-            // Tidak menggunakan listSync(recursive: true) karena tidak bisa
-            // dibatasi depth-nya dan bisa hang pada folder sistem.
-            void scanDir(Directory current, int depth) {
-              if (depth > ScanLimits.maxDepth) return;
-              if (localResults.length >= ScanLimits.maxFiles) return;
+        // Rekursif manual dengan batas depth dan jumlah file.
+        // ScanLimits.maxFiles + ScanLimits.maxDepth adalah hard stop
+        // yang memastikan isolate selesai dalam waktu wajar tanpa
+        // perlu timeout eksternal yang misleading.
+        void scanDir(Directory current, int depth) {
+          if (depth > ScanLimits.maxDepth) return;
+          if (localResults.length >= ScanLimits.maxFiles) return;
 
-              final List<FileSystemEntity> entities;
+          final List<FileSystemEntity> entities;
+          try {
+            entities = current.listSync(recursive: false, followLinks: false);
+          } catch (_) {
+            return; // Skip folder yang tidak bisa diakses (permission denied)
+          }
+
+          for (final entity in entities) {
+            if (localResults.length >= ScanLimits.maxFiles) return;
+
+            if (entity is Directory) {
+              scanDir(entity, depth + 1);
+            } else if (entity is File) {
+              final ext = _fileExtension(entity.path).toLowerCase();
+              if (!normalizedExt.contains(ext)) continue;
+
               try {
-                entities = current.listSync(
-                  recursive: false,
-                  followLinks: false,
+                final stat = entity.statSync();
+                localResults.add(
+                  FileItem(
+                    path: entity.path,
+                    name: _fileName(entity.path),
+                    size: stat.size,
+                    createdDate: stat.changed,
+                    modifiedDate: stat.modified,
+                  ),
                 );
               } catch (_) {
-                return; // Skip folder yang tidak bisa diakses (permission denied)
-              }
-
-              for (final entity in entities) {
-                if (localResults.length >= ScanLimits.maxFiles) return;
-
-                if (entity is Directory) {
-                  scanDir(entity, depth + 1);
-                } else if (entity is File) {
-                  final ext = _fileExtension(entity.path).toLowerCase();
-                  if (!normalizedExt.contains(ext)) continue;
-
-                  try {
-                    final stat = entity.statSync();
-                    localResults.add(
-                      FileItem(
-                        path: entity.path,
-                        name: _fileName(entity.path),
-                        size: stat.size,
-                        createdDate: stat.changed,
-                        modifiedDate: stat.modified,
-                      ),
-                    );
-                  } catch (_) {
-                    // Skip file yang tidak bisa dibaca stat-nya
-                  }
-                }
+                // Skip file yang tidak bisa dibaca stat-nya
               }
             }
+          }
+        }
 
-            scanDir(dir, 0);
-            return localResults;
-          })
-          .then(results.addAll)
-          .timeout(
-            Duration(seconds: ScanLimits.timeoutSeconds),
-            onTimeout: () {
-              // Timeout: kembalikan hasil parsial yang sudah terkumpul
-              // tanpa throw exception agar UI tetap responsif
-            },
-          );
+        scanDir(dir, 0);
+        return localResults;
+      });
     } catch (_) {
-      // Isolate error: kembalikan apa yang sudah terkumpul
+      return <FileItem>[]; // isolate error: kembalikan list kosong
     }
-
-    return results;
   }
 
   // ── Helper functions ──

@@ -5,6 +5,7 @@ import '../models/copy_result.dart';
 import '../models/performance_settings.dart';
 import '../providers/settings_provider.dart';
 import '../services/file_operation_service.dart';
+import '../src/rust/api.dart' as rust;
 
 // ── Services ──
 
@@ -239,17 +240,27 @@ class CopyNotifier extends Notifier<CopyState> {
   }
 
   void pauseCopy() {
-    _fileService.pauseCopy();
+    _fileService.pauseCopy(); // Dart async loop
+    rust.pauseCopy(); // Rust AtomicBool — unawaited, fire-and-forget
     state = state.copyWith(status: CopyStatus.paused);
   }
 
   void resumeCopy() {
-    _fileService.resumeCopy();
+    _fileService.resumeCopy(); // Dart async loop
+    rust.resumeCopy(); // Rust AtomicBool — unawaited, fire-and-forget
     state = state.copyWith(status: CopyStatus.copying);
   }
 
+  /// Cancel operasi copy yang sedang berjalan.
+  ///
+  /// ✅ FIX #1: Dart `_fileService.cancelCopy()` hanya menghentikan Dart
+  /// async copy loop. Rust `copy_files_batch` berjalan di thread pool
+  /// terpisah dan hanya bisa dihentikan via `rust.cancelCopy()` yang
+  /// men-set AtomicBool di Rust — rayon workers akan berhenti di
+  /// iterasi berikutnya setelah cek `cancel_flag.load(Ordering::SeqCst)`.
   void cancelCopy() {
-    _fileService.cancelCopy();
+    _fileService.cancelCopy(); // Dart async loop
+    rust.cancelCopy(); // Rust rayon thread pool
     state = state.copyWith(status: CopyStatus.idle);
   }
 

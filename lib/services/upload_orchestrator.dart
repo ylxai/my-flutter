@@ -116,26 +116,32 @@ class UploadOrchestrator {
       message: 'Scanning source folder...',
     );
 
+    // ✅ FIX kiloconnect WARNING-2: Scan langsung ke processable extensions saja
+    // (.jpg, .jpeg, .png) agar tidak misleading — RAW tidak akan di-scan
+    // lalu silently di-drop. "Found N files" sekarang akurat.
+    final processableExtensions = ['.jpg', '.jpeg', '.png'];
     final scannedFiles = await _scanForImages(
       config.sourceFolder,
       recursive: config.recursiveScan,
-      extensions: config.extensions,
+      extensions: processableExtensions,
     );
     if (_isCancelled) return;
+
+    // imageFiles == scannedFiles karena scan sudah dibatasi ke processable ext
+    final imageFiles = scannedFiles;
+
     yield UploadProgress(
       phase: UploadPhase.scanning,
-      currentFile: scannedFiles.length,
-      totalFiles: scannedFiles.length,
-      message: 'Found ${scannedFiles.length} files',
+      currentFile: imageFiles.length,
+      totalFiles: imageFiles.length,
+      message: 'Found ${imageFiles.length} processable image(s)',
       overallProgress: 0.05,
     );
-    final imageFiles = scannedFiles
-        .where((f) => _isProcessableImage(f.path))
-        .toList();
+
     if (imageFiles.isEmpty) {
       yield const UploadProgress(
         phase: UploadPhase.error,
-        message: 'No image files found in source folder.',
+        message: 'No processable image files found in source folder.',
       );
       return;
     }
@@ -165,17 +171,12 @@ class UploadOrchestrator {
 
       if (_isCancelled) return;
 
-      final failed = results.where((r) => !r.success).toList();
-      if (failed.isNotEmpty) {
-        final failedName = p.basename(failed.first.sourcePath);
-        yield UploadProgress(
-          phase: UploadPhase.error,
-          message: 'Processing failed: $failedName',
-        );
-        return;
-      }
-
+      // ✅ FIX #3: Continue-on-error di image processing.
+      // Sebelumnya: 1 file gagal decode → abort seluruh batch.
+      // Sekarang: pisahkan sukses vs gagal, lanjutkan dengan yang sukses.
+      final processingFailed = results.where((r) => !r.success).toList();
       final processedFiles = results
+          .where((r) => r.success)
           .map(
             (r) => _ProcessedFile(
               sourcePath: r.sourcePath,
@@ -186,6 +187,19 @@ class UploadOrchestrator {
           )
           .toList();
 
+      // Jika SEMUA file gagal di-process, baru hentikan pipeline
+      if (processedFiles.isEmpty) {
+        final failedName = p.basename(processingFailed.first.sourcePath);
+        yield UploadProgress(
+          phase: UploadPhase.error,
+          message:
+              'Processing failed for all files. First error: $failedName — '
+              '${processingFailed.first.errorMessage}',
+          failedCount: processingFailed.length,
+        );
+        return;
+      }
+
       yield UploadProgress(
         phase: UploadPhase.processing,
         currentFile: totalFiles,
@@ -195,61 +209,80 @@ class UploadOrchestrator {
       );
 
       // Phase 3: Upload to R2
-      // ✅ FIX P1-1: Continue-on-error — jangan abort seluruh batch jika
-      // 1 file gagal. Kumpulkan semua error, lanjutkan file berikutnya.
+      // ✅ FIX #4: Ganti serial for-loop dengan concurrent upload.
+      // Serial upload (1 file at a time) sangat lambat untuk 100+ foto.
+      // Gunakan Future.wait dengan concurrency limit (5 paralel) agar:
+      // - Tidak overload R2 / network dengan unlimited concurrency
+      // - Jauh lebih cepat dari serial (5x throughput)
+      // - Masih continue-on-error seperti sebelumnya
+      const int r2Concurrency = 5;
       final eventSlug = _slugify(config.eventName);
       int uploadedR2 = 0;
       int r2FailedCount = 0;
       final r2Errors = <String>[];
       final successfulFiles = <_ProcessedFile>[];
 
-      for (final pf in processedFiles) {
+      // Proses file dalam batch concurrency
+      for (var i = 0; i < processedFiles.length; i += r2Concurrency) {
         if (_isCancelled) return;
 
-        uploadedR2++;
+        final batch = processedFiles.sublist(
+          i,
+          (i + r2Concurrency).clamp(0, processedFiles.length),
+        );
+
+        // Upload thumb + preview untuk setiap file dalam batch secara paralel
+        final batchResults = await Future.wait(
+          batch.map((pf) async {
+            try {
+              // Upload thumb dan preview secara paralel per file
+              await Future.wait([
+                _withRetry(
+                  action: () => _r2Service.uploadFile(
+                    filePath: pf.thumbPath,
+                    objectKey: '$eventSlug/thumbs/${pf.name}.webp',
+                    contentType: 'image/webp',
+                  ),
+                  isRetryable: _isRetryableR2,
+                ),
+                _withRetry(
+                  action: () => _r2Service.uploadFile(
+                    filePath: pf.previewPath,
+                    objectKey: '$eventSlug/previews/${pf.name}.webp',
+                    contentType: 'image/webp',
+                  ),
+                  isRetryable: _isRetryableR2,
+                ),
+              ]);
+              return (file: pf, success: true, error: '');
+            } catch (e) {
+              return (file: pf, success: false, error: e.toString());
+            }
+          }),
+        );
+
+        // Kumpulkan hasil batch
+        for (final result in batchResults) {
+          if (result.success) {
+            uploadedR2 += 2; // thumb + preview
+            successfulFiles.add(result.file);
+          } else {
+            r2FailedCount++;
+            r2Errors.add('${result.file.name}: ${result.error}');
+          }
+        }
+
+        // Emit progress setelah setiap batch selesai
         yield UploadProgress(
           phase: UploadPhase.uploadingToR2,
           currentFile: uploadedR2,
-          totalFiles: totalFiles * 2,
-          currentFileName: '${pf.name}.webp',
-          message: 'Uploading to R2 $uploadedR2/${totalFiles * 2}...',
-          overallProgress: 0.3 + (uploadedR2 / (totalFiles * 2)) * 0.4,
+          totalFiles: processedFiles.length * 2,
+          message:
+              'Uploading to R2 ${successfulFiles.length}/${processedFiles.length}...',
+          overallProgress:
+              0.3 + (uploadedR2 / (processedFiles.length * 2)) * 0.4,
           failedCount: r2FailedCount,
         );
-
-        bool fileSuccess = true;
-        try {
-          // Upload thumbnail
-          await _withRetry(
-            action: () => _r2Service.uploadFile(
-              filePath: pf.thumbPath,
-              objectKey: '$eventSlug/thumbs/${pf.name}.webp',
-              contentType: 'image/webp',
-            ),
-            isRetryable: _isRetryableR2,
-          );
-
-          uploadedR2++;
-
-          // Upload preview
-          await _withRetry(
-            action: () => _r2Service.uploadFile(
-              filePath: pf.previewPath,
-              objectKey: '$eventSlug/previews/${pf.name}.webp',
-              contentType: 'image/webp',
-            ),
-            isRetryable: _isRetryableR2,
-          );
-        } catch (e) {
-          // Catat error tapi lanjutkan file berikutnya
-          r2FailedCount++;
-          fileSuccess = false;
-          r2Errors.add('${pf.name}: $e');
-        }
-
-        if (fileSuccess) {
-          successfulFiles.add(pf);
-        }
       }
 
       // Jika semua file R2 gagal, baru hentikan pipeline
@@ -290,7 +323,8 @@ class UploadOrchestrator {
           return;
         }
 
-        final driveFiles = scannedFiles;
+        // Drive upload original — gunakan imageFiles (sudah difilter ke processable)
+        final driveFiles = imageFiles;
         final folderId = driveFolderId;
         if (folderId == null) {
           yield const UploadProgress(
@@ -418,7 +452,6 @@ class UploadOrchestrator {
       final maxDepth = recursive ? ScanLimits.maxDepth : 0;
 
       void scanDir(Directory current, int depth) {
-        if (depth > maxDepth) return;
         if (paths.length >= ScanLimits.maxFiles) return;
 
         List<FileSystemEntity> entries;
@@ -439,6 +472,9 @@ class UploadOrchestrator {
               paths.add(entry.path);
             }
           } else if (entry is Directory && depth < maxDepth) {
+            // ✅ FIX kiloconnect: guard awal `depth > maxDepth` dihapus karena
+            // redundant — `depth < maxDepth` di sini sudah cukup sebagai gate.
+            // Konsisten dengan file_operation_service.dart yang allow depth == maxDepth.
             scanDir(entry, depth + 1);
           }
         }
@@ -448,11 +484,6 @@ class UploadOrchestrator {
       paths.sort((a, b) => p.basename(a).compareTo(p.basename(b)));
       return paths;
     }).then((paths) => paths.map((path) => File(path)).toList());
-  }
-
-  bool _isProcessableImage(String path) {
-    final ext = p.extension(path).toLowerCase();
-    return ext == '.jpg' || ext == '.jpeg' || ext == '.png';
   }
 
   Future<Directory> _createTempOutputDir() async {

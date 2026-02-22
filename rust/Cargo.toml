@@ -17,6 +17,7 @@ walkdir = "2"
 crossbeam-channel = "0.5"
 anyhow = "1"
 log = "0.4"
+num_cpus = "1.16"
 image = { version = "0.25", default-features = false, features = ["jpeg", "webp"] }
 webp = "0.2.6"
 
