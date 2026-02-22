@@ -300,7 +300,9 @@ static ExternalLibraryLoaderConfig get kDefaultExternalLibraryLoaderConfig =>
 - **Issue:** All DTO structs lack `#[repr(C)]`. While flutter_rust_bridge uses serialization (SseCodec), not direct memory layout, this affects potential future direct FFI access and documentation clarity.
 - **Impact:** LOW - No immediate crash risk due to serialization layer
 - **Severity:** LOW
-- **Fix:** Add `#[repr(C)]` to all structs:
+- **Status:** FIXED
+- **Resolution:** Semua DTO sekarang memakai `#[repr(C)]` untuk kejelasan layout jika suatu saat digunakan oleh FFI langsung.
+- **Fix (implemented):**
 ```rust
 #[repr(C)]
 #[derive(Debug, Clone)]

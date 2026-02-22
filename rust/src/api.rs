@@ -17,6 +17,7 @@ use crate::path_utils;
 // ── Data Transfer Objects (mirrored in Dart) ──
 
 /// Single file copy result — sent to Dart
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct NativeFileCopyResult {
     pub source_path: String,
@@ -31,6 +32,7 @@ pub struct NativeFileCopyResult {
 }
 
 /// Batch copy result — sent to Dart
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct NativeBatchResult {
     pub results: Vec<NativeFileCopyResult>,
@@ -46,6 +48,7 @@ pub struct NativeBatchResult {
 }
 
 /// Progress update — streamed to Dart
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct NativeCopyProgress {
     pub total_files: u32,
@@ -59,6 +62,7 @@ pub struct NativeCopyProgress {
 }
 
 /// File entry for batch operations — received from Dart
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct NativeFileEntry {
     pub source_path: String,
@@ -67,6 +71,7 @@ pub struct NativeFileEntry {
 }
 
 /// Hash verification result
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct NativeHashResult {
     pub hash: String,
@@ -76,6 +81,7 @@ pub struct NativeHashResult {
 }
 
 /// Image processing result — sent to Dart
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct NativeImageResult {
     pub source_path: String,
