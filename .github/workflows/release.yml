@@ -273,8 +273,9 @@ jobs:
 
           # Jalankan makensis dengan version dari tag
           cd windows/installer
+          # Gunakan -D bukan /D agar Git Bash tidak mengkonversi /D ke path Unix
           "/c/Program Files (x86)/NSIS/makensis.exe" \
-            /DVERSION=$VERSION \
+            -DVERSION=$VERSION \
             hafiportrait.nsi
 
           # Pindahkan .exe ke root
