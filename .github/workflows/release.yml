@@ -259,19 +259,30 @@ jobs:
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
       # ── Package: NSIS .exe installer ───────────────────────────────────
-      # NSIS sudah pre-installed di windows-latest runner — tidak perlu choco
-      # Ref: https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md
-      - name: Verify NSIS
+      # Install NSIS langsung dari GitHub releases — tidak butuh choco/network registry
+      - name: Install NSIS
         shell: pwsh
         run: |
           $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
           if (Test-Path $nsisPath) {
-            Write-Host "✅ NSIS found: $nsisPath"
+            Write-Host "✅ NSIS already installed: $nsisPath"
             & $nsisPath /VERSION
           } else {
-            # Fallback: install via choco jika tidak ada
-            Write-Host "NSIS not pre-installed, installing via choco..."
-            choco install nsis -y --no-progress --ignore-package-exit-codes
+            Write-Host "Installing NSIS from GitHub releases..."
+            $nsiVersion = "3.10"
+            $url = "https://github.com/nicowillis/nsis/releases/download/v${nsiVersion}/nsis-${nsiVersion}-setup.exe"
+            # Gunakan sourceforge mirror yang lebih reliable
+            $sfUrl = "https://downloads.sourceforge.net/project/nsis/NSIS%203/${nsiVersion}/nsis-${nsiVersion}-setup.exe"
+            $installer = "$env:TEMP\nsis-setup.exe"
+            Invoke-WebRequest -Uri $sfUrl -OutFile $installer -TimeoutSec 120
+            Start-Process -FilePath $installer -Args "/S" -Wait
+            if (Test-Path $nsisPath) {
+              Write-Host "✅ NSIS installed successfully"
+              & $nsisPath /VERSION
+            } else {
+              Write-Error "❌ NSIS installation failed"
+              exit 1
+            }
           }
 
       - name: Build NSIS Installer
