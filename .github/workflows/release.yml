@@ -263,26 +263,43 @@ jobs:
         run: choco install nsis -y --no-progress
 
       - name: Build NSIS Installer
-        shell: bash
+        shell: pwsh
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
+          $VERSION = "${{ steps.version.outputs.VERSION }}"
 
           # Copy release files ke folder yang NSIS harapkan
-          mkdir -p windows/installer/release
-          cp -r build/windows/x64/runner/Release/. windows/installer/release/
+          New-Item -ItemType Directory -Force -Path "windows\installer\release" | Out-Null
+          Copy-Item -Recurse -Force "build\windows\x64\runner\Release\*" "windows\installer\release\"
 
-          # Jalankan makensis dengan version dari tag
-          cd windows/installer
-          # Gunakan -D bukan /D agar Git Bash tidak mengkonversi /D ke path Unix
-          "/c/Program Files (x86)/NSIS/makensis.exe" \
-            -DVERSION=$VERSION \
-            hafiportrait.nsi
+          # Cari makensis.exe — choco install nsis ke beberapa lokasi yang mungkin
+          $candidates = @(
+            "C:\Program Files (x86)\NSIS\makensis.exe",
+            "C:\Program Files\NSIS\makensis.exe",
+            "C:\ProgramData\chocolatey\bin\makensis.exe"
+          )
+          $makensis = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $makensis) {
+            $makensis = (Get-Command makensis -ErrorAction SilentlyContinue)?.Source
+          }
+          if (-not $makensis) {
+            Write-Error "makensis.exe tidak ditemukan setelah choco install nsis!"
+            exit 1
+          }
+          Write-Host "Using makensis: $makensis"
+
+          # Jalankan makensis dengan PowerShell — tidak ada konversi path Git Bash
+          Push-Location "windows\installer"
+          & $makensis /DVERSION=$VERSION hafiportrait.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
 
           # Pindahkan .exe ke root
-          EXE_NAME="hafiportrait-manager-setup-${VERSION}-windows-x64.exe"
-          mv "hafiportrait-manager-setup-${VERSION}-windows-x64.exe" "../../$EXE_NAME" 2>/dev/null || \
-            mv *.exe "../../$EXE_NAME"
-          echo "EXE_NAME=$EXE_NAME" >> $GITHUB_ENV
+          $EXE_NAME = "hafiportrait-manager-setup-${VERSION}-windows-x64.exe"
+          $exeFile = Get-ChildItem "windows\installer\*.exe" | Select-Object -First 1
+          if ($exeFile) {
+            Move-Item $exeFile.FullName $EXE_NAME
+          }
+          "EXE_NAME=$EXE_NAME" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
