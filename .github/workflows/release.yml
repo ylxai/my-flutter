@@ -259,8 +259,20 @@ jobs:
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
 
       # ── Package: NSIS .exe installer ───────────────────────────────────
-      - name: Install NSIS
-        run: choco install nsis -y --no-progress
+      # NSIS sudah pre-installed di windows-latest runner — tidak perlu choco
+      # Ref: https://github.com/actions/runner-images/blob/main/images/windows/Windows2022-Readme.md
+      - name: Verify NSIS
+        shell: pwsh
+        run: |
+          $nsisPath = "C:\Program Files (x86)\NSIS\makensis.exe"
+          if (Test-Path $nsisPath) {
+            Write-Host "✅ NSIS found: $nsisPath"
+            & $nsisPath /VERSION
+          } else {
+            # Fallback: install via choco jika tidak ada
+            Write-Host "NSIS not pre-installed, installing via choco..."
+            choco install nsis -y --no-progress --ignore-package-exit-codes
+          }
 
       - name: Build NSIS Installer
         shell: pwsh
