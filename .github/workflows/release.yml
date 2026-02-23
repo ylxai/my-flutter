@@ -268,16 +268,13 @@ jobs:
             Write-Host "✅ NSIS already installed: $nsisPath"
             & $nsisPath /VERSION
           } else {
-            Write-Host "Installing NSIS from GitHub releases..."
-            $nsiVersion = "3.10"
-            $url = "https://github.com/nicowillis/nsis/releases/download/v${nsiVersion}/nsis-${nsiVersion}-setup.exe"
-            # Gunakan sourceforge mirror yang lebih reliable
-            $sfUrl = "https://downloads.sourceforge.net/project/nsis/NSIS%203/${nsiVersion}/nsis-${nsiVersion}-setup.exe"
-            $installer = "$env:TEMP\nsis-setup.exe"
-            Invoke-WebRequest -Uri $sfUrl -OutFile $installer -TimeoutSec 120
-            Start-Process -FilePath $installer -Args "/S" -Wait
+            Write-Host "Installing NSIS via winget..."
+            # winget sudah built-in di windows-latest runner — tidak butuh network ke choco/sourceforge
+            winget install --id NSIS.NSIS --silent --accept-package-agreements --accept-source-agreements
+            # Refresh PATH setelah install
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
             if (Test-Path $nsisPath) {
-              Write-Host "✅ NSIS installed successfully"
+              Write-Host "✅ NSIS installed successfully via winget"
               & $nsisPath /VERSION
             } else {
               Write-Error "❌ NSIS installation failed"
