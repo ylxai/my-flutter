@@ -5,9 +5,7 @@ void main(List<String> args) async {
   await build(args, (config, output) async {
     final rustDir = config.packageRoot.resolve('rust/');
     final profile = config.buildMode == BuildMode.release ? 'release' : 'debug';
-    final cargoArgs = profile == 'release'
-        ? ['build', '--release']
-        : ['build'];
+    final cargoArgs = profile == 'release' ? ['build', '--release'] : ['build'];
 
     final result = await Process.run(
       'cargo',
