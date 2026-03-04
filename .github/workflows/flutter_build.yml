@@ -18,7 +18,7 @@ concurrency:
 env:
   FLUTTER_VERSION: "3.41.0"
   RUST_TOOLCHAIN: "1.93.0"
-  FRB_CODEGEN_VERSION: "2.9.0"
+  FRB_CODEGEN_VERSION: "2.11.1"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # JOB 1: Quality Gate — format, lint, analyze, test (Linux only, cepat)
@@ -57,7 +57,7 @@ jobs:
             ~/.cargo/bin/flutter_rust_bridge_codegen
             ~/.cargo/bin/cargo-expand
           # Bump cache key jika salah satu versi berubah
-          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
+          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-2
 
       - name: Install flutter_rust_bridge_codegen + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'
@@ -119,9 +119,9 @@ jobs:
       - name: Flutter tests
         run: flutter test
 
-# ──────────────────────────────────────────────────────────────────────────────
-# JOB 2: Build Linux — hanya jalan setelah quality gate pass
-# ──────────────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────────
+  # JOB 2: Build Linux — hanya jalan setelah quality gate pass
+  # ──────────────────────────────────────────────────────────────────────────────
   build-linux:
     name: Build Linux (Release)
     runs-on: ubuntu-latest
@@ -153,7 +153,7 @@ jobs:
           path: |
             ~/.cargo/bin/flutter_rust_bridge_codegen
             ~/.cargo/bin/cargo-expand
-          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
+          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-2
 
       - name: Install flutter_rust_bridge_codegen + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'
@@ -185,6 +185,10 @@ jobs:
       - name: Generate Rust Bridge
         run: flutter_rust_bridge_codegen generate
 
+      - name: Build Rust Library (release)
+        working-directory: rust
+        run: cargo build --release
+
       - name: Build Linux Release
         run: flutter build linux --release
 
@@ -195,9 +199,9 @@ jobs:
           path: build/linux/x64/release/bundle/
           retention-days: 7
 
-# ──────────────────────────────────────────────────────────────────────────────
-# JOB 3: Build Windows — hanya jalan setelah quality gate pass
-# ──────────────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────────
+  # JOB 3: Build Windows — hanya jalan setelah quality gate pass
+  # ──────────────────────────────────────────────────────────────────────────────
   build-windows:
     name: Build Windows (Release)
     runs-on: windows-latest
@@ -230,7 +234,7 @@ jobs:
           path: |
             ~/.cargo/bin/flutter_rust_bridge_codegen.exe
             ~/.cargo/bin/cargo-expand.exe
-          key: windows-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
+          key: windows-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-2
 
       - name: Install flutter_rust_bridge_codegen + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'

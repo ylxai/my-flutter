@@ -16,16 +16,16 @@ on:
 env:
   FLUTTER_VERSION: "3.41.0"
   RUST_TOOLCHAIN: "1.93.0"
-  FRB_CODEGEN_VERSION: "2.9.0"
+  FRB_CODEGEN_VERSION: "2.11.1"
   APP_NAME: "hafiportrait-manager"
   APP_DISPLAY_NAME: "Hafiportrait Manager"
   APP_ID: "com.hafiportrait.manager"
   MAINTAINER: "Hafiportrait <admin@hafiportrait.com>"
 
 jobs:
-# ─────────────────────────────────────────────────────────────────────────────
-# JOB 1: Build Linux — tar.gz + .deb
-# ─────────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 1: Build Linux — tar.gz + .deb
+  # ─────────────────────────────────────────────────────────────────────────────
   release-linux:
     name: Release Linux (tar.gz + .deb)
     runs-on: ubuntu-latest
@@ -60,7 +60,7 @@ jobs:
           path: |
             ~/.cargo/bin/flutter_rust_bridge_codegen
             ~/.cargo/bin/cargo-expand
-          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
+          key: ubuntu-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-2
 
       - name: Install frb + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'
@@ -92,6 +92,10 @@ jobs:
 
       - name: Generate Rust Bridge
         run: flutter_rust_bridge_codegen generate
+
+      - name: Build Rust Library (release)
+        working-directory: rust
+        run: cargo build --release
 
       - name: Build Linux Release
         run: flutter build linux --release
@@ -182,9 +186,9 @@ jobs:
             ${{ env.DEB_NAME }}
           retention-days: 7
 
-# ─────────────────────────────────────────────────────────────────────────────
-# JOB 2: Build Windows — .zip + NSIS .exe installer
-# ─────────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 2: Build Windows — .zip + NSIS .exe installer
+  # ─────────────────────────────────────────────────────────────────────────────
   release-windows:
     name: Release Windows (.zip + NSIS .exe)
     runs-on: windows-latest
@@ -221,7 +225,7 @@ jobs:
           path: |
             ~/.cargo/bin/flutter_rust_bridge_codegen.exe
             ~/.cargo/bin/cargo-expand.exe
-          key: windows-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-1
+          key: windows-frb-${{ env.FRB_CODEGEN_VERSION }}-expand-2
 
       - name: Install frb + cargo-expand
         if: steps.cache-frb.outputs.cache-hit != 'true'
@@ -330,9 +334,9 @@ jobs:
             ${{ env.EXE_NAME }}
           retention-days: 7
 
-# ─────────────────────────────────────────────────────────────────────────────
-# JOB 3: Publish GitHub Release — setelah Linux + Windows selesai
-# ─────────────────────────────────────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────────────────────────────
+  # JOB 3: Publish GitHub Release — setelah Linux + Windows selesai
+  # ─────────────────────────────────────────────────────────────────────────────
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
