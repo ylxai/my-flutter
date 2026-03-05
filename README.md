@@ -1,3 +1,5 @@
+![Alt](https://repobeats.axiom.co/api/embed/4a122008b41c4cc98b20b13d8ff904522739bbd8.svg "Repobeats analytics image")
+
 # Hafiportrait Manager
 
 > Enterprise-grade desktop application for professional photo management, high-performance file copy operations, and seamless cloud publishing to Cloudflare R2 and Google Drive.
