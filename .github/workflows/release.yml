@@ -100,6 +100,9 @@ jobs:
       - name: Build Linux Release
         run: flutter build linux --release
 
+      - name: Copy Rust library into bundle
+        run: cp rust/target/release/libfilecopy_native.so build/linux/x64/release/bundle/lib/
+
       # ── Package: tar.gz portable ────────────────────────────────────────
       - name: Package Linux tar.gz
         run: |
